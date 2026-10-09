@@ -9,19 +9,12 @@
  * `./release/app/dist/main/main.js` using electron-vite.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
-import log from 'electron-log';
+import { app, BrowserWindow, shell } from 'electron';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import startAutoUpdates from './updates';
+import setupIPCs from './ipc';
 
 let mainWindow: BrowserWindow | null = null;
-
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
-});
 
 if (process.env.NODE_ENV === 'production') {
   process.setSourceMapsEnabled(true);
@@ -91,6 +84,7 @@ const createWindow = async () => {
     return { action: 'deny' };
   });
 
+  setupIPCs();
   await mainWindow.loadURL(resolveHtmlPath('index.html'));
 };
 
@@ -106,8 +100,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-function reportWindowError(error: unknown) {
-  log.error('Failed to create the application window', error);
+function reportWindowError() {
   mainWindow?.destroy();
   mainWindow = null;
 }
@@ -123,10 +116,9 @@ app
   .whenReady()
   .then(async () => {
     await createWindow();
-    startAutoUpdates();
     app.on('activate', onActivate);
   })
-  .catch((error: unknown) => {
-    reportWindowError(error);
+  .catch(() => {
+    reportWindowError();
     app.quit();
   });
