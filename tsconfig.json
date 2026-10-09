@@ -14,7 +14,7 @@
     "allowJs": true,
     "outDir": ".erb/dll",
     "rootDir": ".",
-    "types": ["node", "jest"]
+    "types": ["node"]
   },
   "exclude": [
     "test",
@@ -29,7 +29,6 @@
     ".erb/configs",
     ".erb/scripts",
     "eslint.config.js",
-    "jest.config.js",
     "assets",
     "electron.vite.config.ts"
   ]

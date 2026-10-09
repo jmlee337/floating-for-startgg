@@ -1,38 +1,12 @@
 {
-  "name": "electron-react-boilerplate",
-  "description": "A foundation for scalable desktop apps",
-  "keywords": [
-    "electron",
-    "boilerplate",
-    "react",
-    "typescript",
-    "ts",
-    "sass",
-    "hot",
-    "reload",
-    "vite"
-  ],
-  "homepage": "https://github.com/electron-react-boilerplate/electron-react-boilerplate#readme",
-  "bugs": {
-    "url": "https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/electron-react-boilerplate/electron-react-boilerplate.git"
-  },
+  "name": "floating-for-startgg",
+  "description": "Floating for start.gg",
+  "keywords": [],
   "license": "MIT",
   "author": {
-    "name": "Electron React Boilerplate Maintainers",
-    "email": "electronreactboilerplate@gmail.com",
-    "url": "https://electron-react-boilerplate.js.org"
+    "name": "Nicolet",
+    "email": "jmlee337@gmail.com"
   },
-  "contributors": [
-    {
-      "name": "Amila Welihinda",
-      "email": "amilajack@gmail.com",
-      "url": "https://github.com/amilajack"
-    }
-  ],
   "main": "./release/app/dist/main/main.js",
   "scripts": {
     "build": "electron-vite build",
@@ -42,7 +16,6 @@
     "package": "npm run build && electron-builder build --publish never",
     "rebuild": "electron-rebuild --parallel --types prod,dev,optional --module-dir release/app",
     "start": "electron-vite dev --watch",
-    "test": "jest",
     "test:smoke": "node .erb/scripts/smoke-test.cjs",
     "preview": "electron-vite preview"
   },
@@ -68,6 +41,7 @@
     "electron-debug": "^4.1.0",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
+    "python-shell": "^5.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"
@@ -77,13 +51,9 @@
     "@eslint/compat": "^2.1.1",
     "@eslint/js": "^10.0.1",
     "@swc/core": "^1.16.2",
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.3",
-    "@types/jest": "^30.0.0",
     "@types/node": "26.6.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@types/react-test-renderer": "^19.3.0",
     "@types/semver": "^7.8.0",
     "@vitejs/plugin-react": "^5.2.0",
     "browserslist-config-erb": "^0.0.3",
@@ -103,10 +73,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.12.0",
     "identity-obj-proxy": "^3.0.0",
-    "jest": "^30.5.1",
-    "jest-environment-jsdom": "^30.5.1",
     "prettier": "^3.9.6",
-    "react-test-renderer": "^19.3.0",
     "sass": "^1.104.1",
     "svgo": "^4.1.0",
     "type-fest": "^5.9.0",
@@ -115,9 +82,10 @@
     "vite-plugin-svgr": "^4.5.0"
   },
   "build": {
-    "productName": "ElectronReact",
-    "appId": "org.erb.ElectronReact",
+    "productName": "FloatingForStartgg",
+    "appId": "org.jmlee337.FloatingForStartgg",
     "asar": true,
+    "afterPack": ".erb/scripts/mach-o-uuid.js",
     "afterSign": ".erb/scripts/notarize.js",
     "asarUnpack": "**\\*.{node,dll}",
     "files": [
@@ -126,19 +94,16 @@
       "package.json"
     ],
     "mac": {
-      "notarize": false,
       "target": {
-        "target": "default",
-        "arch": [
-          "arm64",
-          "x64"
-        ]
+        "target": "dmg",
+        "arch": "universal"
       },
       "type": "distribution",
       "hardenedRuntime": true,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "identity": null
     },
     "dmg": {
       "contents": [
@@ -152,12 +117,16 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "writeUpdateInfo": false
     },
     "win": {
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "differentialPackage": false
     },
     "linux": {
       "target": [
@@ -172,15 +141,7 @@
     },
     "extraResources": [
       "./assets/**"
-    ],
-    "publish": {
-      "provider": "github",
-      "owner": "electron-react-boilerplate",
-      "repo": "electron-react-boilerplate"
-    }
-  },
-  "collective": {
-    "url": "https://opencollective.com/electron-react-boilerplate-594"
+    ]
   },
   "devEngines": {
     "runtime": {

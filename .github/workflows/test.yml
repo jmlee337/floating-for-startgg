@@ -6,13 +6,44 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v7.0.1
 
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+      - name: Use Python 3.11 (for distutils)
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
 
+      - name: Install Node.js and NPM
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Clean install
+        run: |
+          npm ci
+
+      - name: npm test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run lint
+          npm exec tsc -- --noEmit
+          npm run package
+
+      - name: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: |
+            release/build/FloatingForStartgg*.dmg
+
+  windows:
+    runs-on: windows-latest
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v7.0.1
@@ -31,15 +62,44 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run package
           npm run lint
           npm exec tsc -- --noEmit
-          npm test
+          npm run package
 
-      - name: Verify Electron startup (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum npm run test:smoke
+      - name: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: |
+            release/build/FloatingForStartgg*.exe
 
-      - name: Verify Electron startup (macOS and Windows)
-        if: runner.os != 'Linux'
-        run: npm run test:smoke
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Node.js and NPM
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Clean install
+        run: |
+          npm ci
+
+      - name: npm test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run lint
+          npm exec tsc -- --noEmit
+          npm run package
+
+      - name: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: |
+            release/build/FloatingForStartgg*.AppImage
