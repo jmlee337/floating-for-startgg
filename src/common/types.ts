@@ -47,6 +47,7 @@ export type SelectableEvent = {
 };
 
 export type RendererEvent = SelectableEvent & {
+  seeds: RendererSeeds;
   phases: RendererPhase[];
 };
 
@@ -57,4 +58,37 @@ export type SelectableTournament = {
 
 export type RendererTournament = SelectableTournament & {
   events: SelectableEvent[];
+};
+
+export type Player = {
+  id: number;
+  gamerTag: string;
+};
+
+export type Entrant = {
+  id: number;
+  players: Player[];
+};
+
+export type Seed = {
+  id: number;
+  seedNum: number;
+  entrant: Entrant;
+};
+
+export type Pool = {
+  id: number;
+  displayIdentifier: string;
+  seeds: Seed[];
+};
+
+export type Phase = {
+  id: number;
+  name: string;
+  pools: Pool[];
+  rawSeeds: Entrant[];
+};
+
+export type RendererSeeds = {
+  phases: Phase[];
 };
