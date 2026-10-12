@@ -43,12 +43,10 @@ export type RendererPhase = {
 export type SelectableEvent = {
   id: number;
   name: string;
-  phaseIds: number[];
 };
 
 export type RendererEvent = SelectableEvent & {
   seeds: RendererSeeds;
-  phases: RendererPhase[];
 };
 
 export type SelectableTournament = {
@@ -74,11 +72,12 @@ export type Seed = {
   id: number;
   seedNum: number;
   entrant: Entrant;
+  projected: boolean;
 };
 
 export type Pool = {
   id: number;
-  displayIdentifier: string;
+  name: string;
   seeds: Seed[];
 };
 
@@ -86,9 +85,9 @@ export type Phase = {
   id: number;
   name: string;
   pools: Pool[];
-  rawSeeds: Entrant[];
 };
 
 export type RendererSeeds = {
   phases: Phase[];
+  raw: Entrant[];
 };

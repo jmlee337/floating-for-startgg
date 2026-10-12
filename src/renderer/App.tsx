@@ -263,30 +263,11 @@ function Hello() {
                             </span>
                           </Tooltip>
                         </Stack>
-                        {selectedEvent.phases.length > 0 && (
-                          <SelectedEvent
-                            event={selectedEvent}
-                            openError={openError}
-                            refresh={async () => {
-                              try {
-                                setGettingEvent(true);
-                                setSelectedEvent(
-                                  await window.electron.getEvent(selectedEvent),
-                                );
-                              } catch (e: unknown) {
-                                if (e instanceof Error) {
-                                  openError(e.message);
-                                }
-                              } finally {
-                                setGettingEvent(false);
-                              }
-                            }}
-                          />
+                        {selectedEvent.seeds.raw.length > 0 && (
+                          <SelectedEvent event={selectedEvent} />
                         )}
-                        {selectedEvent.phases.length === 0 && (
-                          <Alert severity="warning">
-                            No configurable phases
-                          </Alert>
+                        {selectedEvent.seeds.raw.length === 0 && (
+                          <Alert severity="warning">No entrants</Alert>
                         )}
                       </>
                     )}

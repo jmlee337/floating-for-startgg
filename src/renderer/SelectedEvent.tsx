@@ -9,11 +9,12 @@ export default function SelectedEvent({ event }: { event: RendererEvent }) {
         paddingTop: '8px',
         paddingLeft: '8px',
         paddingRight: '8px',
+        gap: '8px',
       }}
     >
       {event.seeds.phases.map((phase) => (
         <Stack key={phase.id} direction="row" style={{ gap: '8px' }}>
-          <Typography variant="body1" style={{ flexShrink: 0 }}>
+          <Typography variant="body2" style={{ flexShrink: 0 }}>
             {phase.name}
           </Typography>
           <Stack
@@ -37,6 +38,7 @@ export default function SelectedEvent({ event }: { event: RendererEvent }) {
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
+                      fontStyle: seed.projected ? 'italic' : 'initial',
                     }}
                   >
                     {seed.seedNum}:{' '}
@@ -50,6 +52,13 @@ export default function SelectedEvent({ event }: { event: RendererEvent }) {
           </Stack>
         </Stack>
       ))}
+      <Typography variant="caption">
+        {event.seeds.raw
+          .map((entrant) =>
+            entrant.players.map((player) => player.gamerTag).join(' / '),
+          )
+          .join(', ')}
+      </Typography>
     </Stack>
   );
 }

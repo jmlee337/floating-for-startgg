@@ -8,7 +8,6 @@ import {
   NewOriginPhaseLink,
   RendererDestPhaseLink,
   RendererOriginPhaseLink,
-  Player,
   Entrant,
   Phase,
   Seed,
@@ -274,12 +273,23 @@ export default async function setupIPCs() {
     }));
   });
 
+  const eventIdToPools = new Map<
+    number,
+    { id: number; phaseId: number; name: string }[]
+  >();
+  const eventIdToPhases = new Map<
+    number,
+    { id: number; name: string; phaseOrder: number }[]
+  >();
   ipcMain.removeHandler('getTournament');
   ipcMain.handle(
     'getTournament',
     async (event, slug: string): Promise<RendererTournament> => {
+      eventIdToPools.clear();
+      eventIdToPhases.clear();
+
       const json = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/tournament/${slug}?expand[]=event&expand[]=phase`,
+        `https://www.start.gg/api/-/rest/tournament/${slug}?expand[]=event&expand[]=phase&expand[]=groups`,
         'GET',
       );
       const tournamentJson = json.entities?.tournament;
@@ -287,19 +297,45 @@ export default async function setupIPCs() {
         throw new Error('no tournament in response');
       }
 
-      const eventIdToPhases = new Map<
-        number,
-        { id: number; state: number }[]
-      >();
+      const phaseIdToEventId = new Map<number, number>();
       const phasesJson = json.entities?.phase;
       if (Array.isArray(phasesJson)) {
         phasesJson.forEach((phaseJson) => {
+          phaseIdToEventId.set(phaseJson.id, phaseJson.eventId);
           let phases = eventIdToPhases.get(phaseJson.eventId);
           if (!phases) {
             phases = [];
             eventIdToPhases.set(phaseJson.eventId, phases);
           }
-          phases.push({ id: phaseJson.id, state: phaseJson.state });
+          phases.push({
+            id: phaseJson.id,
+            name: phaseJson.name,
+            phaseOrder: phaseJson.phaseOrder,
+          });
+        });
+      }
+
+      const poolsJson = json.entities?.groups;
+      if (Array.isArray(poolsJson)) {
+        poolsJson.forEach((poolJson) => {
+          const { id, phaseId } = poolJson;
+          const eventId = phaseIdToEventId.get(phaseId);
+          if (!eventId) {
+            throw new Error(
+              `no eventId found for phase ${phaseId} in phase ${id}`,
+            );
+          }
+
+          let poolIds = eventIdToPools.get(eventId);
+          if (!poolIds) {
+            poolIds = [];
+            eventIdToPools.set(eventId, poolIds);
+          }
+          poolIds.push({
+            id,
+            phaseId: phaseId,
+            name: poolJson.displayIdentifier,
+          });
         });
       }
 
@@ -307,18 +343,15 @@ export default async function setupIPCs() {
       const eventsJson = json.entities?.event;
       if (Array.isArray(eventsJson)) {
         eventsJson.forEach((eventJson) => {
-          const { id } = eventJson;
-          const phases = eventIdToPhases.get(id);
-          if (
-            phases &&
-            phases.length > 1 &&
-            phases.some((phase) => phase.state === 1)
-          ) {
-            events.push({
-              id,
-              phaseIds: phases.map((phase) => phase.id),
-              name: eventJson.name,
-            });
+          if (eventJson.state === 1) {
+            const { id } = eventJson;
+            const phases = eventIdToPhases.get(id);
+            if (phases && phases.length > 1) {
+              events.push({
+                id,
+                name: eventJson.name,
+              });
+            }
           }
         });
       }
@@ -335,164 +368,136 @@ export default async function setupIPCs() {
   ipcMain.handle(
     'getEvent',
     async (ev, event: SelectableEvent): Promise<RendererEvent> => {
+      const pools = eventIdToPools.get(event.id);
+      if (!pools) {
+        throw new Error(`no pools found for event ${event.id}`);
+      }
+      const phases = eventIdToPhases.get(event.id);
+      if (!phases) {
+        throw new Error(`no phases foudn for event ${event.id}`);
+      }
+
       const eventJson = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=seeding`,
+        `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&mutations[]=playerData`,
         'GET',
       );
-      const jsonPlayers = eventJson.entities?.player;
-      if (!Array.isArray(jsonPlayers)) {
-        throw new Error('no players in response');
-      }
       const jsonEntrants = eventJson.entities?.entrants;
       if (!Array.isArray(jsonEntrants)) {
         throw new Error('no entrants in response');
       }
-      const jsonSeeds = eventJson.entities?.seeds;
-      if (!Array.isArray(jsonSeeds)) {
-        throw new Error('no seeds in response');
-      }
-      const jsonPools = eventJson.entities?.groups;
-      if (!Array.isArray(jsonPools)) {
-        throw new Error('no groups in response');
-      }
-      const jsonPhases = eventJson.entities?.phase;
-      if (!Array.isArray(jsonPhases)) {
-        throw new Error('no phases in response');
-      }
 
-      const playerIdToGamerTag = new Map<number, string>();
-      jsonPlayers.forEach((player) => {
-        playerIdToGamerTag.set(player.id, player.gamerTag);
-      });
-      const entrants = jsonEntrants.map((entrant): Entrant => {
+      const idToEntrant = new Map<number, Entrant>();
+      jsonEntrants.forEach((entrant) => {
         const id = entrant.id;
         if (!Number.isInteger(id)) {
-          throw new Error(`no id found for entrant`);
+          return;
         }
         const participantIds = entrant.participantIds;
         if (!Array.isArray(participantIds)) {
-          throw new Error(`no participantIds in entrant ${id}`);
+          return;
+        }
+        const playerIds = entrant.playerIds;
+        if (!(playerIds instanceof Object)) {
+          return;
+        }
+        const players = entrant.mutations.players;
+        if (!(players instanceof Object)) {
+          return;
         }
 
-        const players = participantIds.map((participantId): Player => {
+        const entrantPlayers = participantIds.map((participantId) => {
           const playerId = entrant.playerIds[participantId];
           if (!playerId) {
             throw new Error(
               `no playerId for participant ${participantId} in entrant ${id}`,
             );
           }
-
-          const gamerTag = playerIdToGamerTag.get(playerId);
-          if (gamerTag === undefined) {
-            throw new Error(
-              `no gamerTag found for player ${playerId} in entrant ${id}`,
-            );
+          const player = players[playerId];
+          if (player === undefined) {
+            throw new Error(`player ${playerId} not found in entrant ${id}`);
           }
 
-          return { id: playerId, gamerTag };
+          return { id: playerId, gamerTag: player.gamerTag };
         });
-
-        return { id, players };
-      });
-      const idToEntrant = new Map(
-        entrants.map((entrant) => [entrant.id, entrant]),
-      );
-      const poolIdToSeeds = new Map<number, Seed[]>();
-      const phaseIdToSeeds = new Map<number, Seed[]>();
-      jsonSeeds.forEach((seed) => {
-        const id = seed.id;
-        if (!Number.isInteger(id)) {
-          throw new Error('no id found for seed');
-        }
-        const seedNum = seed.seedNum;
-        if (!Number.isInteger(seedNum)) {
-          throw new Error(`no seedNum found for seed ${id}`);
-        }
-        const entrantId = seed.entrantId;
-        if (!Number.isInteger(entrantId)) {
-          throw new Error(`no entrantId found for seed ${id}`);
-        }
-        const poolId = seed.phaseGroupId;
-        if (!Number.isInteger(poolId)) {
-          throw new Error(`no phaseGroupId found for seed ${id}`);
-        }
-        const phaseId = seed.phaseId;
-        if (!Number.isInteger(phaseId)) {
-          throw new Error(`no phaseId found for seed ${id}`);
-        }
-
-        const entrant = idToEntrant.get(entrantId);
-        if (!entrant) {
-          throw new Error(`no entrant found for ${entrantId} in seed ${id}`);
-        }
-
-        let poolSeeds = poolIdToSeeds.get(poolId);
-        if (!poolSeeds) {
-          poolSeeds = [];
-          poolIdToSeeds.set(poolId, poolSeeds);
-        }
-        poolSeeds.push({
-          id,
-          seedNum,
-          entrant,
-        });
-
-        let phaseSeeds = phaseIdToSeeds.get(phaseId);
-        if (!phaseSeeds) {
-          phaseSeeds = [];
-          phaseIdToSeeds.set(phaseId, phaseSeeds);
-        }
-        phaseSeeds.push({
-          id,
-          seedNum,
-          entrant,
-        });
+        idToEntrant.set(id, { id, players: entrantPlayers });
       });
 
       const phaseIdToPools = new Map<number, Pool[]>();
-      jsonPools.forEach((pool) => {
-        const id = pool.id;
-        if (!Number.isInteger(id)) {
-          throw new Error('no id found for pool');
-        }
-        const displayIdentifier = pool.displayIdentifier;
-        if (typeof displayIdentifier !== 'string') {
-          throw new Error(`no displayIdentifier found for pool ${id}`);
-        }
-        const phaseId = pool.phaseId;
-        if (!Number.isInteger(phaseId)) {
-          throw new Error(`no phaseId found for pool ${id}`);
-        }
+      for (const pool of pools) {
+        const poolJson = await fetchWithCookie(
+          `https://www.start.gg/api/-/rest/admin/phase_group/${pool.id}?expand[]=seeds`,
+          'GET',
+        );
 
-        const seeds = poolIdToSeeds.get(id) ?? [];
+        const seeds: Seed[] = [];
+        const jsonSeeds = poolJson.entities?.seeds;
+        if (Array.isArray(jsonSeeds)) {
+          jsonSeeds.forEach((seed) => {
+            const id = seed.id;
+            if (!Number.isInteger(id)) {
+              throw new Error('no id found for seed');
+            }
+            const seedNum = seed.seedNum;
+            if (!Number.isInteger(seedNum)) {
+              throw new Error(`no seedNum found for seed ${id}`);
+            }
+
+            const getEntrant = () => {
+              const entrantId = seed.entrantId;
+              if (Number.isInteger(entrantId)) {
+                const entrant = idToEntrant.get(entrantId);
+                if (!entrant) {
+                  throw new Error(
+                    `no entrant found for ${entrantId} in seed ${id} (pool ${pool.id})`,
+                  );
+                }
+                return { entrant, projected: false };
+              }
+
+              const projectedEntrantId = seed.projectedEntrantId;
+              if (Number.isInteger(projectedEntrantId)) {
+                const entrant = idToEntrant.get(projectedEntrantId);
+                if (!entrant) {
+                  throw new Error(
+                    `no projected entrant found for ${projectedEntrantId} in seed ${id} (pool ${pool.id})`,
+                  );
+                }
+                return { entrant, projected: true };
+              }
+
+              throw new Error(
+                `no entrant or projected entrant found in seed ${id}`,
+              );
+            };
+            const { entrant, projected } = getEntrant();
+
+            seeds.push({
+              id,
+              seedNum,
+              entrant,
+              projected,
+            });
+          });
+        }
         seeds.sort((a, b) => a.seedNum - b.seedNum);
 
-        let phasePools = phaseIdToPools.get(phaseId);
+        let phasePools = phaseIdToPools.get(pool.phaseId);
         if (!phasePools) {
           phasePools = [];
-          phaseIdToPools.set(phaseId, phasePools);
+          phaseIdToPools.set(pool.phaseId, phasePools);
         }
-        phasePools.push({ id, displayIdentifier, seeds });
-      });
+        phasePools.push({ id: pool.phaseId, name: pool.name, seeds });
+      }
+      const phaseIdToSeeds = new Map<number, Seed[]>();
 
-      const seedPhases = jsonPhases.map((phase): SeedPhase => {
+      const seedPhases = phases.map((phase): SeedPhase => {
         const id = phase.id;
-        if (!Number.isInteger(id)) {
-          throw new Error('no id found for phase');
-        }
-        const name = phase.name;
-        if (typeof name !== 'string') {
-          throw new Error(`no name found for phase ${id}`);
-        }
-        const phaseOrder = phase.phaseOrder;
-        if (!Number.isInteger(phaseOrder)) {
-          throw new Error(`no phaseOrder found for phase ${id}`);
-        }
-        const pools = phaseIdToPools.get(id);
-        if (!pools) {
+        const phasePools = phaseIdToPools.get(id);
+        if (!phasePools) {
           throw new Error(`no pools found for phase ${id}`);
         }
-        pools.sort((a, b) => {
+
+        phasePools.sort((a, b) => {
           if (a.seeds.length === 0 && b.seeds.length === 0) {
             return 0;
           }
@@ -510,51 +515,26 @@ export default async function setupIPCs() {
         seeds.sort((a, b) => a.seedNum - b.seedNum);
         return {
           id,
-          name,
-          pools,
-          rawSeeds: seeds.map((seed) => seed.entrant),
-          phaseOrder,
+          name: phase.name,
+          pools: phasePools,
+          phaseOrder: phase.phaseOrder,
         };
       });
       seedPhases.sort((a, b) => b.phaseOrder - a.phaseOrder);
 
-      const phases: RendererPhase[] = [];
-      for (const phaseId of event.phaseIds) {
-        const phaseJson = await fetchWithCookie(
-          `https://www.start.gg/api/-/rest/phase/${phaseId}?expand[]=bracketSetup&expand[]=phaseLink`,
-          'GET',
+      const raw: Entrant[] = [];
+      seedPhases.forEach((phase) => {
+        const phaseSeeds = phase.pools.flatMap((pool) =>
+          pool.seeds.filter((seed) => !seed.projected),
         );
-        const jsonPhase = phaseJson.entities?.phase;
-        if (!(jsonPhase instanceof Object)) {
-          throw new Error('no phase in response');
-        }
-
-        const { id } = jsonPhase;
-        let destPhaseLinks: RendererDestPhaseLink[] = [];
-        let originPhaseLinks: RendererOriginPhaseLink[] = [];
-        const jsonPhaseLinks = phaseJson.entities?.phaseLink;
-        if (Array.isArray(jsonPhaseLinks)) {
-          ({ destPhaseLinks, originPhaseLinks } =
-            toDestOriginRendererPhaseLinks(jsonPhaseLinks, id));
-        }
-
-        phases.push({
-          id,
-          destPhaseLinks,
-          originPhaseLinks,
-          name: jsonPhase.name,
-          state: jsonPhase.state,
-          bracketType: jsonPhase.bracketType,
-          groupCount: jsonPhase.groupCount,
-          numProgressing: jsonPhase.numProgressing ?? 0,
-          winnersTargetPhaseId: jsonPhase.winnersTargetPhaseId,
-        });
-      }
+        phaseSeeds.sort((a, b) => a.seedNum - b.seedNum);
+        raw.push(...phaseSeeds.map((seed) => seed.entrant));
+      });
       return {
         ...event,
-        phases,
         seeds: {
           phases: seedPhases,
+          raw,
         },
       };
     },
