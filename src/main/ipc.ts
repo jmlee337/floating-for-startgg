@@ -59,11 +59,11 @@ export default async function setupIPCs() {
   ipcMain.removeHandler('getAppVersion');
   ipcMain.handle('getAppVersion', app.getVersion);
 
-  ipcMain.removeAllListeners('getVersionLatest');
+  ipcMain.removeHandler('getVersionLatest');
   ipcMain.handle('getVersionLatest', async () => {
     try {
       const response = await fetch(
-        'https://api.github.com/repos/jmlee337/losers-progressions-for-startgg/releases/latest',
+        'https://api.github.com/repos/jmlee337/floating-for-startgg/releases/latest',
       );
       const json = await response.json();
       const latestVersion = json.tag_name;
@@ -76,20 +76,20 @@ export default async function setupIPCs() {
     }
   });
 
-  ipcMain.removeAllListeners('update');
+  ipcMain.removeHandler('update');
   ipcMain.handle('update', async () => {
     await shell.openExternal(
-      'https://github.com/jmlee337/losers-progressions-for-startgg/releases/latest',
+      'https://github.com/jmlee337/floating-for-startgg/releases/latest',
     );
     app.quit();
   });
 
-  ipcMain.removeAllListeners('getEmail');
+  ipcMain.removeHandler('getEmail');
   ipcMain.handle('getEmail', () => {
     return store.get('email', '');
   });
 
-  ipcMain.removeAllListeners('getPassword');
+  ipcMain.removeHandler('getPassword');
   ipcMain.handle('getPassword', () => {
     if (!safeStorage.isEncryptionAvailable()) {
       return '';
@@ -171,7 +171,7 @@ export default async function setupIPCs() {
     }
   };
 
-  ipcMain.removeAllListeners('isLoggedIn');
+  ipcMain.removeHandler('isLoggedIn');
   ipcMain.handle('isLoggedIn', async () => {
     if (!cookieMap.has('gg_session')) {
       return false;
@@ -201,7 +201,7 @@ export default async function setupIPCs() {
     return true;
   });
 
-  ipcMain.removeAllListeners('login');
+  ipcMain.removeHandler('login');
   ipcMain.handle('login', async (event, email: string, password: string) => {
     const response = await fetch('https://www.start.gg/api/-/rest/user/login', {
       method: 'POST',
@@ -241,14 +241,14 @@ export default async function setupIPCs() {
     setCookies(setCookie);
   });
 
-  ipcMain.removeAllListeners('logout');
+  ipcMain.removeHandler('logout');
   ipcMain.handle('logout', async () => {
     await fetchWithCookie('https://www.start.gg/api/-/rest/user/logout', 'GET');
     cookieMap.clear();
     store.set('cookies', []);
   });
 
-  ipcMain.removeAllListeners('getTournaments');
+  ipcMain.removeHandler('getTournaments');
   ipcMain.handle('getTournaments', async () => {
     const json = await fetchWithCookie(
       'https://www.start.gg/api/-/rest/tournaments?page=1&per_page=25&filter={%22isTournamentAdmin%22:true}',
@@ -265,7 +265,7 @@ export default async function setupIPCs() {
     }));
   });
 
-  ipcMain.removeAllListeners('getTournament');
+  ipcMain.removeHandler('getTournament');
   ipcMain.handle(
     'getTournament',
     async (event, slug: string): Promise<RendererTournament> => {
@@ -322,7 +322,7 @@ export default async function setupIPCs() {
     },
   );
 
-  ipcMain.removeAllListeners('getEvent');
+  ipcMain.removeHandler('getEvent');
   ipcMain.handle(
     'getEvent',
     async (ev, event: SelectableEvent): Promise<RendererEvent> => {
@@ -367,7 +367,7 @@ export default async function setupIPCs() {
     },
   );
 
-  ipcMain.removeAllListeners('putDestPhaseLinks');
+  ipcMain.removeHandler('putDestPhaseLinks');
   ipcMain.handle(
     'putDestPhaseLinks',
     async (
@@ -414,7 +414,7 @@ export default async function setupIPCs() {
     },
   );
 
-  ipcMain.removeAllListeners('putOriginPhaseLinks');
+  ipcMain.removeHandler('putOriginPhaseLinks');
   ipcMain.handle(
     'putOriginPhaseLinks',
     async (
@@ -461,7 +461,7 @@ export default async function setupIPCs() {
     },
   );
 
-  ipcMain.removeAllListeners('putNumProgressing');
+  ipcMain.removeHandler('putNumProgressing');
   ipcMain.handle(
     'putNumProgressing',
     async (
