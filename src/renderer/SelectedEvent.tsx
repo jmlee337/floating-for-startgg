@@ -1,7 +1,5 @@
 import {
-  Button,
   Card,
-  CardActions,
   CardContent,
   Stack,
   Table,
@@ -11,9 +9,8 @@ import {
   Typography,
 } from '@mui/material';
 import styled from '@emotion/styled';
-import { useMemo, useState } from 'react';
-import { RendererEvent, RendererPhase } from '../common/types';
-import SelectedPhase from './SelectedPhase';
+import { useMemo } from 'react';
+import { RendererEvent } from '../common/types';
 import getBracketTypeDesc from './getBracketTypeDesc';
 import getOriginPhaseLinkTypeDesc from './getOriginPhaseLinkTypeDesc';
 import getDestBracketSideDesc from './getDestBracketSideDesc';
@@ -23,19 +20,7 @@ const Cell = styled(TableCell)`
   padding: 4px;
 `;
 
-export default function SelectedEvent({
-  event,
-  refresh,
-  openError,
-}: {
-  event: RendererEvent;
-  refresh: () => Promise<void>;
-  openError: (message: string) => void;
-}) {
-  const [selectedPhase, setSelectedPhase] = useState<RendererPhase | null>(
-    null,
-  );
-
+export default function SelectedEvent({ event }: { event: RendererEvent }) {
   const idToPhase = useMemo(
     () => new Map(event.phases.map((phase) => [phase.id, phase])),
     [event.phases],
@@ -118,25 +103,8 @@ export default function SelectedEvent({
               </>
             )}
           </CardContent>
-          <CardActions>
-            <Button
-              disabled={phase.state !== 1}
-              onClick={() => {
-                setSelectedPhase(phase);
-              }}
-            >
-              Edit
-            </Button>
-          </CardActions>
         </Card>
       ))}
-      <SelectedPhase
-        phase={selectedPhase}
-        setPhase={setSelectedPhase}
-        idToPhase={idToPhase}
-        refreshEvent={refresh}
-        openError={openError}
-      />
     </Stack>
   );
 }
