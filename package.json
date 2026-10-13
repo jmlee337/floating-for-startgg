@@ -104,6 +104,7 @@
         "target": "dmg",
         "arch": "universal"
       },
+      "x64ArchFiles": "**/node_modules/better-sqlite3/prebuilds/*",
       "type": "distribution",
       "hardenedRuntime": true,
       "entitlements": "assets/entitlements.mac.plist",
