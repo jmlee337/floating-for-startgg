@@ -30,6 +30,7 @@ import { lt } from 'semver';
 import {
   RendererEvent,
   RendererTournament,
+  SelectableEvent,
   SelectableTournament,
 } from '../common/types';
 import SelectTournament from './SelectTournament';
@@ -263,28 +264,24 @@ function Hello() {
                             </span>
                           </Tooltip>
                         </Stack>
-                        {selectedEvent.seeds.raw.length > 0 &&
-                          !gettingEvent && (
-                            <SelectedEvent
-                              event={selectedEvent}
-                              reflow={async () => {
-                                try {
-                                  setGettingEvent(true);
-                                  setSelectedEvent(
-                                    await window.electron.reflow(selectedEvent),
-                                  );
-                                } catch (e: unknown) {
-                                  if (e instanceof Error) {
-                                    openError(e.message);
-                                  }
-                                } finally {
-                                  setGettingEvent(false);
+                        {!gettingEvent && (
+                          <SelectedEvent
+                            event={selectedEvent}
+                            reflow={async () => {
+                              try {
+                                setGettingEvent(true);
+                                setSelectedEvent(
+                                  await window.electron.reflow(selectedEvent),
+                                );
+                              } catch (e: unknown) {
+                                if (e instanceof Error) {
+                                  openError(e.message);
                                 }
-                              }}
-                            />
-                          )}
-                        {selectedEvent.seeds.raw.length === 0 && (
-                          <Alert severity="warning">No entrants</Alert>
+                              } finally {
+                                setGettingEvent(false);
+                              }
+                            }}
+                          />
                         )}
                       </>
                     )}
@@ -293,8 +290,29 @@ function Hello() {
                         {selectedTournament.events.length > 0 && (
                           <SelectEvent
                             events={selectedTournament.events}
-                            setEvent={setSelectedEvent}
-                            openError={openError}
+                            getEvent={async (
+                              newSelectedEvent: SelectableEvent,
+                            ) => {
+                              try {
+                                setSelectedEvent({
+                                  ...newSelectedEvent,
+                                  seeds: { phases: [], raw: [] },
+                                  configuredPhases: [],
+                                });
+                                setGettingEvent(true);
+                                setSelectedEvent(
+                                  await window.electron.getEvent(
+                                    newSelectedEvent,
+                                  ),
+                                );
+                              } catch (e: unknown) {
+                                if (e instanceof Error) {
+                                  openError(e.message);
+                                }
+                              } finally {
+                                setGettingEvent(false);
+                              }
+                            }}
                           />
                         )}
                         {selectedTournament.events.length === 0 && (
