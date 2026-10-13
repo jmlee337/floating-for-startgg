@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
+  ConfiguredPhase,
   NewOriginPhaseLink,
   RendererDestPhaseLink,
   RendererEvent,
@@ -51,6 +52,12 @@ const electronHandler = {
       numProgressing,
       winnersTargetPhaseId,
     ),
+  upsertConfiguredPhase: (configuredPhase: ConfiguredPhase): Promise<void> =>
+    ipcRenderer.invoke('upsertConfiguredPhase', configuredPhase),
+  getConfiguredPhase: (phaseId: number): Promise<ConfiguredPhase> =>
+    ipcRenderer.invoke('getConfiguredPhase', phaseId),
+  reflow: (selectableEvent: SelectableEvent): Promise<RendererEvent> =>
+    ipcRenderer.invoke('reflow', selectableEvent),
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

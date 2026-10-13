@@ -47,6 +47,7 @@ export type SelectableEvent = {
 
 export type RendererEvent = SelectableEvent & {
   seeds: RendererSeeds;
+  configuredPhases: ConfiguredPhase[];
 };
 
 export type SelectableTournament = {
@@ -84,10 +85,30 @@ export type Pool = {
 export type Phase = {
   id: number;
   name: string;
+  /**
+   * 1 SINGLE_ELIMINATION
+   * 2 DOUBLE_ELIMINATION
+   * 3 ROUND_ROBIN
+   * 4 SWISS
+   * 5 EXHIBITION
+   * 6CUSTOM_SCHEDULE
+   * 7 MATCHMAKING
+   * 8 ELIMINATION_ROUNDS
+   * 9 RACE
+   * 10 CIRCUIT
+   */
+  bracketType: number;
   pools: Pool[];
 };
 
 export type RendererSeeds = {
   phases: Phase[];
   raw: Entrant[];
+};
+
+export type ConfiguredPhase = {
+  id: number;
+  eventId: number;
+  directInPerPool: number;
+  progressingInPerPool: number;
 };

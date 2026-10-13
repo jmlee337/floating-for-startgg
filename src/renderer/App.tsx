@@ -76,7 +76,7 @@ function Hello() {
     if (!selectedEvent) {
       return 'Select Event';
     }
-    return 'Edit Progressions!';
+    return 'Float!';
   }, [isLoggedIn, selectedEvent, selectedTournament]);
 
   const getTournaments = useCallback(async () => {
@@ -263,9 +263,26 @@ function Hello() {
                             </span>
                           </Tooltip>
                         </Stack>
-                        {selectedEvent.seeds.raw.length > 0 && (
-                          <SelectedEvent event={selectedEvent} />
-                        )}
+                        {selectedEvent.seeds.raw.length > 0 &&
+                          !gettingEvent && (
+                            <SelectedEvent
+                              event={selectedEvent}
+                              reflow={async () => {
+                                try {
+                                  setGettingEvent(true);
+                                  setSelectedEvent(
+                                    await window.electron.reflow(selectedEvent),
+                                  );
+                                } catch (e: unknown) {
+                                  if (e instanceof Error) {
+                                    openError(e.message);
+                                  }
+                                } finally {
+                                  setGettingEvent(false);
+                                }
+                              }}
+                            />
+                          )}
                         {selectedEvent.seeds.raw.length === 0 && (
                           <Alert severity="warning">No entrants</Alert>
                         )}
