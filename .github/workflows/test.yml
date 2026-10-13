@@ -69,7 +69,7 @@ jobs:
       - name: upload
         uses: actions/upload-artifact@v7
         with:
-          name: macos
+          name: windows
           path: |
             release/build/FloatingForStartgg*.exe
 
@@ -100,6 +100,6 @@ jobs:
       - name: upload
         uses: actions/upload-artifact@v7
         with:
-          name: macos
+          name: linux
           path: |
             release/build/FloatingForStartgg*.AppImage
