@@ -60,11 +60,13 @@ function ConfigurePhase({
   phase,
   configuredPhaseInitial,
   progressingInPerPool,
+  setDirty,
 }: {
   eventId: number;
   phase: Phase;
   configuredPhaseInitial: ConfiguredPhase | undefined;
   progressingInPerPool: number;
+  setDirty: () => void;
 }) {
   const [configuredPhase, setConfiguredPhase] = useState(
     configuredPhaseInitial,
@@ -152,6 +154,7 @@ function ConfigurePhase({
               setConfiguredPhase(
                 await window.electron.getConfiguredPhase(phase.id),
               );
+              setDirty();
             }}
           >
             Confirm
@@ -172,6 +175,7 @@ function ConfigurePhase({
                 setConfiguredPhase(
                   await window.electron.getConfiguredPhase(phase.id),
                 );
+                setDirty();
               }}
             >
               Update
@@ -251,6 +255,7 @@ export default function SelectedEvent({
   }, [event]);
 
   const [open, setOpen] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   return (
     <Stack
@@ -283,7 +288,9 @@ export default function SelectedEvent({
         open={open}
         onClose={() => {
           setOpen(false);
-          reflow();
+          if (dirty) {
+            reflow();
+          }
         }}
       >
         <DialogTitle>Configure Floating for {event.name}</DialogTitle>
@@ -297,6 +304,9 @@ export default function SelectedEvent({
               phase={phase}
               configuredPhaseInitial={idToConfiguredPhase.get(phase.id)}
               progressingInPerPool={idToProgressingInPerPool.get(phase.id)!}
+              setDirty={() => {
+                setDirty(true);
+              }}
             />
           ))}
         </DialogContent>
