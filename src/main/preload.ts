@@ -1,11 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   ConfiguredPhase,
-  NewOriginPhaseLink,
-  RendererDestPhaseLink,
   RendererEvent,
-  RendererOriginPhaseLink,
-  RendererPhase,
   RendererTournament,
   SelectableEvent,
 } from '../common/types';
@@ -29,29 +25,6 @@ const electronHandler = {
     ipcRenderer.invoke('getTournament', slug),
   getEvent: (event: SelectableEvent): Promise<RendererEvent> =>
     ipcRenderer.invoke('getEvent', event),
-  putDestPhaseLinks: (
-    phaseId: number,
-    destPhaseLinks: RendererDestPhaseLink[],
-  ): Promise<RendererPhase> =>
-    ipcRenderer.invoke('putDestPhaseLinks', phaseId, destPhaseLinks),
-  putOriginPhaseLinks: (
-    phaseId: number,
-    originPhaseLinks: (NewOriginPhaseLink | RendererOriginPhaseLink)[],
-  ): Promise<RendererPhase> =>
-    ipcRenderer.invoke('putOriginPhaseLinks', phaseId, originPhaseLinks),
-  putNumProgressing: (
-    phaseId: number,
-    groupTypeId: number,
-    numProgressing: number,
-    winnersTargetPhaseId: number,
-  ): Promise<RendererPhase> =>
-    ipcRenderer.invoke(
-      'putNumProgressing',
-      phaseId,
-      groupTypeId,
-      numProgressing,
-      winnersTargetPhaseId,
-    ),
   upsertConfiguredPhase: (configuredPhase: ConfiguredPhase): Promise<void> =>
     ipcRenderer.invoke('upsertConfiguredPhase', configuredPhase),
   getConfiguredPhase: (phaseId: number): Promise<ConfiguredPhase> =>

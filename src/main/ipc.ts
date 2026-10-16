@@ -4,10 +4,6 @@ import {
   SelectableEvent,
   RendererTournament,
   RendererEvent,
-  RendererPhase,
-  NewOriginPhaseLink,
-  RendererDestPhaseLink,
-  RendererOriginPhaseLink,
   Entrant,
   Phase,
   Seed,
@@ -20,45 +16,6 @@ import DatabaseContstructor from 'better-sqlite3';
 type SeedPhase = Phase & {
   phaseOrder: number;
 };
-
-function toDestOriginRendererPhaseLinks(
-  jsonPhaseLinks: any[],
-  phaseId: number,
-) {
-  return {
-    originPhaseLinks: jsonPhaseLinks
-      .filter((jsonPhaseLink) => jsonPhaseLink.originPhaseId === phaseId)
-      .map((jsonPhaseLink): RendererOriginPhaseLink => ({
-        id: jsonPhaseLink.id,
-        numSeeds: jsonPhaseLink.numSeeds,
-        destPhaseId: jsonPhaseLink.destPhaseId,
-        maintainMatchup: jsonPhaseLink.maintainMatchup,
-        isDefault: jsonPhaseLink.isDefault,
-        type: jsonPhaseLink.type,
-        destSeedOrder: jsonPhaseLink.destSeedOrder,
-        destBracketSide: jsonPhaseLink.destBracketSide,
-        originPlacement: jsonPhaseLink.originPlacement,
-        originPhaseId: jsonPhaseLink.originPhaseId,
-        originLosses: jsonPhaseLink.originLosses,
-      })),
-    destPhaseLinks: jsonPhaseLinks
-      .filter((jsonPhaseLink) => jsonPhaseLink.destPhaseId === phaseId)
-      .map((jsonPhaseLink): RendererDestPhaseLink => ({
-        id: jsonPhaseLink.id,
-        numSeeds: jsonPhaseLink.numSeeds,
-        destPhaseId: jsonPhaseLink.destPhaseId,
-        maintainMatchup: jsonPhaseLink.maintainMatchup,
-        isDefault: jsonPhaseLink.isDefault,
-        type: jsonPhaseLink.type,
-        destSeedOrder: jsonPhaseLink.destSeedOrder,
-        destBracketSide: jsonPhaseLink.destBracketSide,
-        originPlacement: jsonPhaseLink.originPlacement,
-        originPhaseId: jsonPhaseLink.originPhaseId,
-        originLosses: jsonPhaseLink.originLosses,
-      }))
-      .sort((a, b) => a.destSeedOrder - b.destSeedOrder),
-  };
-}
 
 export default async function setupIPCs() {
   const store = new Store<{
@@ -78,6 +35,13 @@ export default async function setupIPCs() {
       eventId INTEGER,
       directInPerPool INTEGER,
       progressingInPerPool INTEGER
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS seeds (
+      entrantId INTEGER PRIMARY KEY,
+      eventId INTEGER,
+      seedNum INTEGER
     )`,
   ).run();
 
@@ -638,152 +602,6 @@ export default async function setupIPCs() {
         await putDirect(phase.id, entrantIds);
       }
       return getEvent(selectedEvent);
-    },
-  );
-
-  ipcMain.removeHandler('putDestPhaseLinks');
-  ipcMain.handle(
-    'putDestPhaseLinks',
-    async (
-      event,
-      phaseId: number,
-      destPhaseLinksIn: RendererDestPhaseLink[],
-    ): Promise<RendererPhase> => {
-      const json = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/phase/${phaseId}`,
-        'PUT',
-        JSON.stringify({
-          destPhaseLinks: destPhaseLinksIn,
-        }),
-      );
-      if (!Array.isArray(json.entities?.phase)) {
-        throw new Error('no phase array');
-      }
-
-      const jsonPhase = (json.entities.phase as any[]).find(
-        (phase) => phase.id === phaseId,
-      );
-      if (jsonPhase === undefined) {
-        throw new Error('no updated phase');
-      }
-
-      const jsonPhaseLinks = json.entities?.phaseLink;
-      if (!Array.isArray(jsonPhaseLinks)) {
-        throw new Error('no phaseLink array');
-      }
-
-      const { destPhaseLinks, originPhaseLinks } =
-        toDestOriginRendererPhaseLinks(jsonPhaseLinks, phaseId);
-      return {
-        id: phaseId,
-        name: jsonPhase.name,
-        state: jsonPhase.state,
-        bracketType: jsonPhase.bracketType,
-        groupCount: jsonPhase.groupCount,
-        destPhaseLinks,
-        originPhaseLinks,
-        numProgressing: jsonPhase.numProgressing ?? 0,
-        winnersTargetPhaseId: jsonPhase.winnersTargetPhaseId,
-      };
-    },
-  );
-
-  ipcMain.removeHandler('putOriginPhaseLinks');
-  ipcMain.handle(
-    'putOriginPhaseLinks',
-    async (
-      event,
-      phaseId: number,
-      originPhaseLinksIn: (NewOriginPhaseLink | RendererOriginPhaseLink)[],
-    ): Promise<RendererPhase> => {
-      const json = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/phase/${phaseId}`,
-        'PUT',
-        JSON.stringify({
-          originPhaseLinks: originPhaseLinksIn,
-        }),
-      );
-      if (!Array.isArray(json.entities?.phase)) {
-        throw new Error('no phase array');
-      }
-
-      const jsonPhase = (json.entities.phase as any[]).find(
-        (phase) => phase.id === phaseId,
-      );
-      if (jsonPhase === undefined) {
-        throw new Error('no updated phase');
-      }
-
-      const jsonPhaseLinks = json.entities?.phaseLink;
-      if (!Array.isArray(jsonPhaseLinks)) {
-        throw new Error('no phaseLink array');
-      }
-
-      const { destPhaseLinks, originPhaseLinks } =
-        toDestOriginRendererPhaseLinks(jsonPhaseLinks, phaseId);
-      return {
-        id: phaseId,
-        name: jsonPhase.name,
-        state: jsonPhase.state,
-        bracketType: jsonPhase.bracketType,
-        groupCount: jsonPhase.groupCount,
-        destPhaseLinks,
-        originPhaseLinks,
-        numProgressing: jsonPhase.numProgressing ?? 0,
-        winnersTargetPhaseId: jsonPhase.winnersTargetPhaseId,
-      };
-    },
-  );
-
-  ipcMain.removeHandler('putNumProgressing');
-  ipcMain.handle(
-    'putNumProgressing',
-    async (
-      event,
-      phaseId: number,
-      groupTypeId: number,
-      numProgressing: number,
-      winnersTargetPhaseId: number,
-    ): Promise<RendererPhase> => {
-      const json = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/phase/${phaseId}`,
-        'PUT',
-        JSON.stringify({
-          groupTypeId,
-          numProgressing: numProgressing.toString(10),
-          winnersTargetPhaseId:
-            winnersTargetPhaseId === 0 ? undefined : winnersTargetPhaseId,
-        }),
-      );
-      if (!Array.isArray(json.entities?.phase)) {
-        throw new Error('no phase array');
-      }
-
-      const jsonPhase = (json.entities.phase as any[]).find(
-        (phase) => phase.id === phaseId,
-      );
-      if (jsonPhase === undefined) {
-        throw new Error('no updated phase');
-      }
-
-      const jsonPhaseLinks = json.entities?.phaseLink;
-      if (!Array.isArray(jsonPhaseLinks)) {
-        throw new Error('no phaseLink array');
-      }
-
-      const { destPhaseLinks, originPhaseLinks } =
-        toDestOriginRendererPhaseLinks(jsonPhaseLinks, phaseId);
-      return {
-        id: phaseId,
-        name: jsonPhase.name,
-        state: jsonPhase.state,
-        bracketType: jsonPhase.bracketType,
-        groupCount: jsonPhase.groupCount,
-        destPhaseLinks,
-        originPhaseLinks,
-        numProgressing: jsonPhase.numProgressing ?? 0,
-        winnersTargetPhaseId: jsonPhase.winnersTargetPhaseId,
-      };
     },
   );
 }
