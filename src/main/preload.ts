@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   ConfiguredPhase,
+  Entrant,
   RendererEvent,
   RendererTournament,
   SelectableEvent,
@@ -31,6 +32,10 @@ const electronHandler = {
     ipcRenderer.invoke('getConfiguredPhase', phaseId),
   reflow: (selectableEvent: SelectableEvent): Promise<RendererEvent> =>
     ipcRenderer.invoke('reflow', selectableEvent),
+  updateLocalSeeds: (eventId: number, entrants: Entrant[]): Promise<void> =>
+    ipcRenderer.invoke('updateLocalSeeds', eventId, entrants),
+  getLocalSeeds: (eventId: number): Promise<Entrant[]> =>
+    ipcRenderer.invoke('getLocalSeeds', eventId),
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

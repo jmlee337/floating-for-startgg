@@ -14,7 +14,12 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { ConfiguredPhase, Phase, RendererEvent } from '../common/types';
+import {
+  ConfiguredPhase,
+  Entrant,
+  Phase,
+  RendererEvent,
+} from '../common/types';
 import { useMemo, useState } from 'react';
 
 function getDirectInPerPool(phase: Phase) {
@@ -186,6 +191,98 @@ function ConfigurePhase({
   );
 }
 
+function StartggEvent({ phases }: { phases: Phase[] }) {
+  return (
+    <>
+      {phases.map((phase) => (
+        <Stack key={phase.id} direction="row" style={{ gap: '8px' }}>
+          <Typography variant="body2" style={{ flexShrink: 0 }}>
+            {phase.name}
+          </Typography>
+          <Stack
+            direction="row"
+            style={{
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {phase.pools.map((pool) => (
+              <Stack
+                key={pool.id}
+                direction="column"
+                style={{ width: '130px' }}
+              >
+                {pool.seeds.map((seed) => (
+                  <Typography
+                    key={seed.id}
+                    variant="caption"
+                    color={seed.projected ? 'warning' : 'textPrimary'}
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontStyle: seed.projected ? 'italic' : 'initial',
+                    }}
+                  >
+                    {seed.seedNum}:{' '}
+                    {seed.entrant.players
+                      .map((player) => player.gamerTag)
+                      .join(' / ')}
+                  </Typography>
+                ))}
+              </Stack>
+            ))}
+          </Stack>
+        </Stack>
+      ))}
+    </>
+  );
+}
+
+function LocalEvent({
+  phases,
+  localSeeds,
+}: {
+  phases: Phase[];
+  localSeeds: Entrant[];
+}) {
+  const actualPhases = useMemo(() => {
+    const remainingEntrants = new Array(...localSeeds);
+    const ret: Phase[] = [];
+    for (const phase of phases) {
+      if (remainingEntrants.length === 0) {
+        break;
+      }
+
+      const numEntrants = phase.pools
+        .map((pool) => pool.seeds.filter((seed) => !seed.projected).length)
+        .reduce((prev, curr) => prev + curr);
+      const seedNumToEntrant = new Map(
+        remainingEntrants
+          .splice(0, numEntrants)
+          .map((entrant, i) => [i + 1, entrant]),
+      );
+
+      ret.push({
+        ...phase,
+        pools: phase.pools.map((pool) => ({
+          ...pool,
+          seeds: pool.seeds.map((seed) => {
+            const entrant = seedNumToEntrant.get(seed.seedNum);
+            return {
+              ...seed,
+              entrant: entrant ?? { id: seed.seedNum, players: [] },
+            };
+          }),
+        })),
+      });
+    }
+    return ret;
+  }, [phases, localSeeds]);
+
+  return <StartggEvent phases={actualPhases} />;
+}
+
 export default function SelectedEvent({
   event,
   reflow,
@@ -257,6 +354,9 @@ export default function SelectedEvent({
   const [open, setOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  const [editing, setEditing] = useState(false);
+  const [localSeeds, setLocalSeeds] = useState<Entrant[]>([]);
+
   return (
     <Stack
       direction="column"
@@ -264,7 +364,7 @@ export default function SelectedEvent({
         paddingTop: '8px',
         paddingLeft: '8px',
         paddingRight: '8px',
-        gap: '8px',
+        gap: '16px',
       }}
     >
       {!fullyConfigured && (
@@ -283,6 +383,66 @@ export default function SelectedEvent({
         >
           Floating Not Configured
         </Alert>
+      )}
+      {fullyConfigured && (
+        <Stack
+          direction="row"
+          style={{
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingLeft: '36px',
+          }}
+        >
+          <Typography variant="body1" style={{ margin: '4px 0' }}>
+            {editing ? 'Editing locally:' : 'Viewing start.gg:'}
+          </Typography>
+          {editing ? (
+            <Stack direction="row" style={{ gap: '8px' }}>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => {
+                  setEditing(false);
+                }}
+              >
+                View start.gg
+              </Button>
+            </Stack>
+          ) : (
+            <Stack direction="row" style={{ gap: '8px' }}>
+              <Button
+                color="warning"
+                size="small"
+                variant="contained"
+                onClick={() => {
+                  setOpen(true);
+                }}
+              >
+                Configure Floating
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={async () => {
+                  let newLocalSeeds = await window.electron.getLocalSeeds(
+                    event.id,
+                  );
+                  if (newLocalSeeds.length === 0) {
+                    newLocalSeeds = event.seeds.raw;
+                    await window.electron.updateLocalSeeds(
+                      event.id,
+                      newLocalSeeds,
+                    );
+                  }
+                  setLocalSeeds(newLocalSeeds);
+                  setEditing(true);
+                }}
+              >
+                Edit Locally
+              </Button>
+            </Stack>
+          )}
+        </Stack>
       )}
       <Dialog
         open={open}
@@ -311,67 +471,19 @@ export default function SelectedEvent({
           ))}
         </DialogContent>
       </Dialog>
-      {event.seeds.phases
-        .filter((phase) => idToDirectInPerPool.get(phase.id) ?? 0 !== 0)
-        .map((phase) => (
-          <Stack key={phase.id} direction="row" style={{ gap: '8px' }}>
-            <Typography variant="body2" style={{ flexShrink: 0 }}>
-              {phase.name}
-            </Typography>
-            <Stack
-              direction="row"
-              style={{
-                flexWrap: 'wrap',
-                gap: '8px',
-              }}
-            >
-              {phase.pools.map((pool) => (
-                <Stack
-                  key={pool.id}
-                  direction="column"
-                  style={{ width: '130px' }}
-                >
-                  {pool.seeds.map((seed) => (
-                    <Typography
-                      key={seed.id}
-                      variant="caption"
-                      color={seed.projected ? 'warning' : 'textPrimary'}
-                      style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontStyle: seed.projected ? 'italic' : 'initial',
-                      }}
-                    >
-                      {seed.seedNum}:{' '}
-                      {seed.entrant.players
-                        .map((player) => player.gamerTag)
-                        .join(' / ')}
-                    </Typography>
-                  ))}
-                </Stack>
-              ))}
-            </Stack>
-          </Stack>
-        ))}
-      <Typography variant="caption">
-        {event.seeds.raw
-          .map((entrant) =>
-            entrant.players.map((player) => player.gamerTag).join(' / '),
-          )
-          .join(', ')}
-      </Typography>
-      {fullyConfigured && (
-        <Stack direction="row" style={{ justifyContent: 'end' }}>
-          <Button
-            variant="contained"
-            onClick={() => {
-              setOpen(true);
-            }}
-          >
-            Configure
-          </Button>
-        </Stack>
+      {editing ? (
+        <LocalEvent
+          phases={event.seeds.phases.filter(
+            (phase) => idToDirectInPerPool.get(phase.id) ?? 0 !== 0,
+          )}
+          localSeeds={localSeeds}
+        />
+      ) : (
+        <StartggEvent
+          phases={event.seeds.phases.filter(
+            (phase) => idToDirectInPerPool.get(phase.id) ?? 0 !== 0,
+          )}
+        />
       )}
     </Stack>
   );

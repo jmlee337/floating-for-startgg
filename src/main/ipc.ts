@@ -8,6 +8,7 @@ import {
   Phase,
   Seed,
   ConfiguredPhase,
+  Player,
 } from '../common/types';
 import { mkdirSync } from 'fs';
 import path from 'path';
@@ -15,6 +16,19 @@ import DatabaseContstructor from 'better-sqlite3';
 
 type SeedPhase = Phase & {
   phaseOrder: number;
+};
+
+type DbSeed = {
+  entrantId: number;
+  eventId: number;
+  seedNum: number;
+};
+
+type DbPlayer = {
+  id: number;
+  eventId: number;
+  entrantId: number;
+  gamerTag: string;
 };
 
 export default async function setupIPCs() {
@@ -42,6 +56,14 @@ export default async function setupIPCs() {
       entrantId INTEGER PRIMARY KEY,
       eventId INTEGER,
       seedNum INTEGER
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS players (
+      id INTEGER PRIMARY KEY,
+      eventId INTEGER,
+      entrantId INTEGER,
+      gamerTag TEXT
     )`,
   ).run();
 
@@ -604,4 +626,84 @@ export default async function setupIPCs() {
       return getEvent(selectedEvent);
     },
   );
+
+  ipcMain.removeHandler('updateLocalSeeds');
+  ipcMain.handle(
+    'updateLocalSeeds',
+    (event, eventId: number, entrants: Entrant[]) => {
+      const dbSeeds = entrants.map((entrant, i): DbSeed => ({
+        entrantId: entrant.id,
+        eventId,
+        seedNum: i + 1,
+      }));
+      const dbPlayers = entrants.flatMap((entrant): DbPlayer[] =>
+        entrant.players.map((player) => ({
+          id: player.id,
+          eventId,
+          entrantId: entrant.id,
+          gamerTag: player.gamerTag,
+        })),
+      );
+
+      db.transaction(() => {
+        db.prepare('DELETE FROM seeds WHERE eventId = @eventId').run({
+          eventId,
+        });
+        db.prepare('DELETE FROM players WHERE eventId = @eventId').run({
+          eventId,
+        });
+        dbSeeds.forEach((dbSeed) => {
+          db.prepare(
+            `INSERT INTO seeds (
+              entrantId, eventId, seedNum
+            ) values (
+              @entrantId, @eventId, @seedNum
+            )`,
+          ).run(dbSeed);
+        });
+        dbPlayers.forEach((dbPlayer) => {
+          db.prepare(
+            `INSERT INTO players (
+              id, eventId, entrantId, gamerTag
+            ) values (
+              @id, @eventId, @entrantId, @gamerTa
+            )`,
+          ).run(dbPlayer);
+        });
+      })();
+    },
+  );
+
+  ipcMain.removeHandler('getLocalSeeds');
+  ipcMain.handle('getLocalSeeds', (event, eventId: number): Entrant[] => {
+    const dbSeeds = db
+      .prepare(
+        'SELECT * FROM seeds WHERE eventId = @eventId ORDER BY seedNum ASC',
+      )
+      .all({ eventId }) as DbSeed[];
+
+    const entrantIdToPlayers = new Map<number, Player[]>();
+    (
+      db
+        .prepare('SELECT * FROM players WHERE eventId = @eventId')
+        .all({ eventId }) as DbPlayer[]
+    ).forEach((dbPlayer) => {
+      let players = entrantIdToPlayers.get(dbPlayer.entrantId);
+      if (!players) {
+        players = [];
+        entrantIdToPlayers.set(dbPlayer.entrantId, players);
+      }
+      players.push({ id: dbPlayer.id, gamerTag: dbPlayer.gamerTag });
+    });
+
+    const entrants = dbSeeds.map((seed): Entrant => {
+      const players = entrantIdToPlayers.get(seed.entrantId);
+      if (!players) {
+        throw new Error(`player(s) not found for entrant ${seed.entrantId}`);
+      }
+      return { id: seed.entrantId, players };
+    });
+
+    return entrants;
+  });
 }
