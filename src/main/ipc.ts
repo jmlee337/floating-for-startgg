@@ -572,6 +572,7 @@ export default async function setupIPCs() {
       directDestPhaseLinks[0].destSeedOrder = -1;
       directDestPhaseLinks[0].entrantIds = entrantIds;
       directDestPhaseLinks[0].initialEntrants = initialEntrants;
+      directDestPhaseLinks[0].numSeeds = entrantIds.length;
     } else {
       destPhaseLinks.push({
         destPhaseId: phaseId,
@@ -583,6 +584,7 @@ export default async function setupIPCs() {
         destBracketSide: 1,
         cId: `${phaseId}-1`,
         initialEntrants,
+        numSeeds: entrantIds.length,
       });
     }
     console.log(phaseId);

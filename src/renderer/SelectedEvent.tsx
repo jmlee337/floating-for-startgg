@@ -295,6 +295,8 @@ export default function SelectedEvent({
     idToDirectInPerPool,
     idToProgressingInPerPool,
     fullyConfigured,
+    configurationMatches,
+    properlyFlowed,
   } = useMemo(() => {
     const idToConfiguredPhaseInner = new Map(
       event.configuredPhases.map((configuredPhase) => [
@@ -316,16 +318,13 @@ export default function SelectedEvent({
       );
     });
 
-    return {
-      idToConfiguredPhase: idToConfiguredPhaseInner,
-      idToDirectInPerPool: idToDirectInPerPoolInner,
-      idToProgressingInPerPool: idToProgressingInPerPoolInner,
-      fullyConfigured: event.seeds.phases.every((phase) => {
-        const configuredPhase = idToConfiguredPhaseInner.get(phase.id);
-        if (!configuredPhase) {
-          return false;
-        }
-
+    const fullyConfiguredInner = event.seeds.phases.every((phase) =>
+      idToConfiguredPhaseInner.has(phase.id),
+    );
+    const configurationMatchesInner =
+      fullyConfiguredInner &&
+      event.seeds.phases.every((phase) => {
+        const configuredPhase = idToConfiguredPhaseInner.get(phase.id)!;
         const progressingInPerPool = idToProgressingInPerPoolInner.get(
           phase.id,
         );
@@ -335,8 +334,20 @@ export default function SelectedEvent({
         ) {
           throw new Error('unreachable');
         }
-        if (progressingInPerPool !== configuredPhase.progressingInPerPool) {
-          return false;
+        return progressingInPerPool === configuredPhase.progressingInPerPool;
+      });
+    const properlyFlowedInner =
+      configurationMatchesInner &&
+      event.seeds.phases.every((phase) => {
+        const configuredPhase = idToConfiguredPhaseInner.get(phase.id)!;
+        const progressingInPerPool = idToProgressingInPerPoolInner.get(
+          phase.id,
+        );
+        if (
+          !progressingInPerPool &&
+          configuredPhase.progressingInPerPool !== 0
+        ) {
+          throw new Error('unreachable');
         }
         if (progressingInPerPool === 0) {
           return true;
@@ -347,7 +358,15 @@ export default function SelectedEvent({
           throw new Error('unreachable');
         }
         return directInPerPool === configuredPhase.directInPerPool;
-      }),
+      });
+
+    return {
+      idToConfiguredPhase: idToConfiguredPhaseInner,
+      idToDirectInPerPool: idToDirectInPerPoolInner,
+      idToProgressingInPerPool: idToProgressingInPerPoolInner,
+      fullyConfigured: fullyConfiguredInner,
+      configurationMatches: configurationMatchesInner,
+      properlyFlowed: properlyFlowedInner,
     };
   }, [event]);
 
@@ -381,10 +400,44 @@ export default function SelectedEvent({
             </Button>
           }
         >
-          Floating Not Configured
+          Floating not configured
         </Alert>
       )}
-      {fullyConfigured && (
+      {fullyConfigured && !configurationMatches && (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              variant="contained"
+              onClick={() => {
+                setOpen(true);
+              }}
+            >
+              Confirm configuration
+            </Button>
+          }
+        >
+          start.gg progressions changed
+        </Alert>
+      )}
+      {fullyConfigured && configurationMatches && !properlyFlowed && (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              variant="contained"
+              onClick={() => {
+                reflow();
+              }}
+            >
+              Reflow
+            </Button>
+          }
+        >
+          Entrant reflow required
+        </Alert>
+      )}
+      {fullyConfigured && configurationMatches && properlyFlowed && (
         <Stack
           direction="row"
           style={{
