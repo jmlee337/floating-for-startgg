@@ -668,7 +668,7 @@ export default async function setupIPCs() {
             `INSERT INTO players (
               id, eventId, entrantId, gamerTag
             ) values (
-              @id, @eventId, @entrantId, @gamerTa
+              @id, @eventId, @entrantId, @gamerTag
             )`,
           ).run(dbPlayer);
         });
