@@ -19,6 +19,7 @@ import {
   Entrant,
   Phase,
   RendererEvent,
+  Seed,
 } from '../common/types';
 import { useMemo, useState } from 'react';
 
@@ -28,12 +29,12 @@ function getDirectInPerPool(phase: Phase) {
   }
 
   const directInPerPool = phase.pools[0].seeds.filter(
-    (seed) => !seed.projected,
+    (seed) => seed.entrant,
   ).length;
   if (
     phase.pools.every(
       (pool) =>
-        pool.seeds.filter((seed) => !seed.projected).length === directInPerPool,
+        pool.seeds.filter((seed) => seed.entrant).length === directInPerPool,
     )
   ) {
     return directInPerPool;
@@ -46,12 +47,12 @@ function getProgressingInPerPool(phase: Phase) {
   }
 
   const progressingInPerPool = phase.pools[0].seeds.filter(
-    (seed) => seed.projected,
+    (seed) => seed.origin,
   ).length;
   if (
     phase.pools.every(
       (pool) =>
-        pool.seeds.filter((seed) => seed.projected).length ===
+        pool.seeds.filter((seed) => seed.origin).length ===
         progressingInPerPool,
     )
   ) {
@@ -192,6 +193,15 @@ function ConfigurePhase({
 }
 
 function StartggEvent({ phases }: { phases: Phase[] }) {
+  const poolIdToSeeds = useMemo(() => {
+    const newPoolIdToSeeds = new Map<number, Seed[]>();
+    phases.forEach((phase) => {
+      phase.pools.forEach((pool) => {
+        newPoolIdToSeeds.set(pool.id, pool.seeds);
+      });
+    });
+    return newPoolIdToSeeds;
+  }, [phases]);
   return (
     <>
       {phases.map((phase) => (
@@ -216,18 +226,26 @@ function StartggEvent({ phases }: { phases: Phase[] }) {
                   <Typography
                     key={seed.id}
                     variant="caption"
-                    color={seed.projected ? 'warning' : 'textPrimary'}
+                    color={seed.origin ? 'warning' : 'textPrimary'}
                     style={{
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      fontStyle: seed.projected ? 'italic' : 'initial',
+                      fontStyle: seed.origin ? 'italic' : 'initial',
                     }}
                   >
                     {seed.seedNum}:{' '}
-                    {seed.entrant.players
-                      .map((player) => player.gamerTag)
-                      .join(' / ')}
+                    {seed.entrant &&
+                      seed.entrant.players
+                        .map((player) => player.gamerTag)
+                        .join(' / ')}
+                    {seed.origin &&
+                      poolIdToSeeds
+                        .get(seed.origin.poolId)
+                        ?.[seed.origin.placement - 1]?.entrant?.players.map(
+                          (player) => player.gamerTag,
+                        )
+                        .join(' / ')}
                   </Typography>
                 ))}
               </Stack>
@@ -255,7 +273,7 @@ function LocalEvent({
       }
 
       const numEntrants = phase.pools
-        .map((pool) => pool.seeds.filter((seed) => !seed.projected).length)
+        .map((pool) => pool.seeds.filter((seed) => seed.entrant).length)
         .reduce((prev, curr) => prev + curr);
       const seedNumToEntrant = new Map(
         remainingEntrants

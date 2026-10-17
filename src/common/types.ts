@@ -30,8 +30,8 @@ export type Entrant = {
 export type Seed = {
   id: number;
   seedNum: number;
-  entrant: Entrant;
-  projected: boolean;
+  entrant: Entrant | undefined;
+  origin: { placement: number; poolId: number } | undefined;
 };
 
 export type Pool = {

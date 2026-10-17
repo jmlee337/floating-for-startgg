@@ -31,6 +31,36 @@ type DbPlayer = {
   gamerTag: string;
 };
 
+const PHASE_SEEDS_QUERY = `
+  query phaseSeeds($phaseId: ID, $page: Int) {
+    phase(id: $phaseId) {
+      seeds(query: {page: $page, perPage: 249, sortBy: "seedNum ASC"}) {
+        pageInfo {
+          totalPages
+        }
+        nodes {
+          id
+          phaseGroup {
+            id
+          }
+          seedNum
+          groupSeedNum
+          placeholderName
+          progressionSource {
+            originPlacement
+            originPhaseGroup {
+              id
+            }
+          }
+          entrant {
+            id
+          }
+        }
+      }
+    }
+  }
+`;
+
 export default async function setupIPCs() {
   const store = new Store<{
     base64EncryptedPassword: string;
@@ -181,6 +211,19 @@ export default async function setupIPCs() {
       throw new Error(text, { cause: e });
     }
   };
+  const fetchGqlWithCookie = async (query: string, variables: any) => {
+    const json = await fetchWithCookie(
+      'https://www.start.gg/api/-/gql',
+      'POST',
+      JSON.stringify({ query, variables }),
+    );
+    if (json.errors) {
+      throw new Error(
+        json.errors.map((error: any) => error.message).join(', '),
+      );
+    }
+    return json.data;
+  };
 
   ipcMain.removeHandler('isLoggedIn');
   ipcMain.handle('isLoggedIn', async () => {
@@ -276,18 +319,12 @@ export default async function setupIPCs() {
     }));
   });
 
-  const eventIdToPhases = new Map<
-    number,
-    { id: number; name: string; bracketType: number; phaseOrder: number }[]
-  >();
   ipcMain.removeHandler('getTournament');
   ipcMain.handle(
     'getTournament',
     async (event, slug: string): Promise<RendererTournament> => {
-      eventIdToPhases.clear();
-
       const json = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/tournament/${slug}?expand[]=event&expand[]=phase`,
+        `https://www.start.gg/api/-/rest/tournament/${slug}?expand[]=event`,
         'GET',
       );
       const tournamentJson = json.entities?.tournament;
@@ -295,38 +332,15 @@ export default async function setupIPCs() {
         throw new Error('no tournament in response');
       }
 
-      const phaseIdToEventId = new Map<number, number>();
-      const phasesJson = json.entities?.phase;
-      if (Array.isArray(phasesJson)) {
-        phasesJson.forEach((phaseJson) => {
-          phaseIdToEventId.set(phaseJson.id, phaseJson.eventId);
-          let phases = eventIdToPhases.get(phaseJson.eventId);
-          if (!phases) {
-            phases = [];
-            eventIdToPhases.set(phaseJson.eventId, phases);
-          }
-          phases.push({
-            id: phaseJson.id,
-            name: phaseJson.name,
-            bracketType: phaseJson.bracketType,
-            phaseOrder: phaseJson.phaseOrder,
-          });
-        });
-      }
-
       const events: SelectableEvent[] = [];
       const eventsJson = json.entities?.event;
       if (Array.isArray(eventsJson)) {
         eventsJson.forEach((eventJson) => {
           if (eventJson.state === 1) {
-            const { id } = eventJson;
-            const phases = eventIdToPhases.get(id);
-            if (phases && phases.length > 1) {
-              events.push({
-                id,
-                name: eventJson.name,
-              });
-            }
+            events.push({
+              id: eventJson.id,
+              name: eventJson.name,
+            });
           }
         });
       }
@@ -340,18 +354,21 @@ export default async function setupIPCs() {
   );
 
   const getEvent = async (event: SelectableEvent): Promise<RendererEvent> => {
-    const phases = eventIdToPhases.get(event.id);
-    if (!phases) {
-      throw new Error(`no phases foudn for event ${event.id}`);
-    }
-
     const eventJson = await fetchWithCookie(
-      `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&mutations[]=playerData&bustCache`,
+      `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&expand[]=phase&expand[]=groups&mutations[]=playerData&bustCache`,
       'GET',
     );
     const jsonEntrants = eventJson.entities?.entrants;
     if (!Array.isArray(jsonEntrants)) {
       throw new Error('no entrants in response');
+    }
+    const jsonPhases = eventJson.entities?.phase;
+    if (!Array.isArray(jsonPhases)) {
+      throw new Error('no phases in response');
+    }
+    const jsonGroups = eventJson.entities?.groups;
+    if (!Array.isArray(jsonGroups)) {
+      throw new Error('no pools in response');
     }
 
     const idToEntrant = new Map<number, Entrant>();
@@ -390,81 +407,71 @@ export default async function setupIPCs() {
       idToEntrant.set(id, { id, players: entrantPlayers });
     });
 
+    const phases = jsonPhases.map((jsonPhase) => ({
+      id: jsonPhase.id,
+      name: jsonPhase.name,
+      bracketType: jsonPhase.bracketType,
+      phaseOrder: jsonPhase.phaseOrder,
+    }));
+
+    const phaseIdToIdToPool = new Map<
+      number,
+      Map<number, { id: number; name: string; seeds: Seed[] }>
+    >();
+    jsonGroups.forEach((jsonGroup) => {
+      let idToPool = phaseIdToIdToPool.get(jsonGroup.phaseId);
+      if (!idToPool) {
+        idToPool = new Map();
+        phaseIdToIdToPool.set(jsonGroup.phaseId, idToPool);
+      }
+      idToPool.set(jsonGroup.id, {
+        id: jsonGroup.id,
+        name: jsonGroup.displayIdentifier,
+        seeds: [],
+      });
+    });
+
     const seedPhases: SeedPhase[] = [];
     for (const phase of phases) {
-      const phaseJson = await fetchWithCookie(
-        `https://www.start.gg/api/-/rest/phase/${phase.id}?expand[]=seeding&bustCache`,
-        'GET',
-      );
-
-      const idToPool = new Map<
-        number,
-        { id: number; name: string; seeds: Seed[] }
-      >();
-      const jsonGroups = phaseJson.entities?.groups;
-      if (Array.isArray(jsonGroups)) {
-        jsonGroups.forEach((jsonGroup) => {
-          idToPool.set(jsonGroup.id, {
-            id: jsonGroup.id,
-            name: jsonGroup.displayIdentifier,
-            seeds: [],
-          });
-        });
+      const idToPool = phaseIdToIdToPool.get(phase.id);
+      if (!idToPool) {
+        throw new Error(`no pools found for phase ${phase.id}`);
       }
 
-      const jsonSeeds = phaseJson.entities?.seeds;
-      if (Array.isArray(jsonSeeds)) {
-        jsonSeeds.forEach((jsonSeed) => {
-          const id = jsonSeed.id;
-          if (!Number.isInteger(id)) {
-            throw new Error('no id found for seed');
-          }
-          const seedNum = jsonSeed.seedNum;
-          if (!Number.isInteger(seedNum)) {
-            throw new Error(`no seedNum found for seed ${id}`);
-          }
-          const phaseGroupId = jsonSeed.phaseGroupId;
-          if (!Number.isInteger(phaseGroupId)) {
-            throw new Error(`no phaseGroupId found for seed ${id}`);
-          }
-
-          const getEntrant = () => {
-            const entrantId = jsonSeed.entrantId;
-            if (Number.isInteger(entrantId)) {
-              const entrant = idToEntrant.get(entrantId);
-              if (!entrant) {
-                throw new Error(
-                  `no entrant found for ${entrantId} in seed ${id} (phase ${phase.id})`,
-                );
-              }
-              return { entrant, projected: false };
-            }
-
-            const projectedEntrantId = jsonSeed.projectedEntrantId;
-            if (Number.isInteger(projectedEntrantId)) {
-              const entrant = idToEntrant.get(projectedEntrantId);
-              if (!entrant) {
-                throw new Error(
-                  `no projected entrant found for ${projectedEntrantId} in seed ${id} (phase ${phase.id})`,
-                );
-              }
-              return { entrant, projected: true };
-            }
-
-            throw new Error(
-              `no entrant or projected entrant found in seed ${id}`,
-            );
-          };
-          const { entrant, projected } = getEntrant();
-
-          const pool = idToPool.get(phaseGroupId);
-          if (!pool) {
-            throw new Error(
-              `pool ${phaseGroupId} not found for seed ${id} (phase ${phase.id})`,
-            );
-          }
-          pool.seeds.push({ id, seedNum, entrant, projected });
+      let page = 1;
+      while (true) {
+        const nextData = await fetchGqlWithCookie(PHASE_SEEDS_QUERY, {
+          phaseId: phase.id,
+          page,
         });
+        const { nodes } = nextData.phase.seeds;
+        if (Array.isArray(nodes)) {
+          nodes.forEach((node) => {
+            const entrantId = node.entrant?.id;
+            const entrant = entrantId ? idToEntrant.get(entrantId) : undefined;
+            const placement = node.progressionSource?.originPlacement;
+            const poolId = node.progressionSource?.originPhaseGroup.id;
+            const origin =
+              placement && poolId ? { placement, poolId } : undefined;
+            const seed: Seed = {
+              id: node.id,
+              seedNum: node.seedNum,
+              entrant,
+              origin,
+            };
+            const pool = idToPool.get(node.phaseGroup.id);
+            if (!pool) {
+              throw new Error(
+                `pool ${node.phaseGroup.id} not found for seed ${node.id} (phase ${phase.id})`,
+              );
+            }
+            pool.seeds.push(seed);
+          });
+        }
+        page += 1;
+        if (page > nextData.phase.seeds.pageInfo.totalPages) {
+          break;
+        }
       }
 
       const pools = Array.from(idToPool.values());
@@ -497,10 +504,10 @@ export default async function setupIPCs() {
     const raw: Entrant[] = [];
     seedPhases.forEach((phase) => {
       const phaseSeeds = phase.pools.flatMap((pool) =>
-        pool.seeds.filter((seed) => !seed.projected),
+        pool.seeds.filter((seed) => seed.entrant),
       );
       phaseSeeds.sort((a, b) => a.seedNum - b.seedNum);
-      raw.push(...phaseSeeds.map((seed) => seed.entrant));
+      raw.push(...phaseSeeds.map((seed) => seed.entrant!));
     });
 
     return {
@@ -587,8 +594,6 @@ export default async function setupIPCs() {
         numSeeds: entrantIds.length,
       });
     }
-    console.log(phaseId);
-    console.log(destPhaseLinks);
     await fetchWithCookie(
       `https://www.start.gg/api/-/rest/phase/${phaseId}`,
       'PUT',
