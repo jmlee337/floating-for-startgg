@@ -5,6 +5,7 @@ import {
   CardActions,
   CardContent,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
@@ -222,6 +223,7 @@ function StartggEvent({ phases }: { phases: Phase[] }) {
                 direction="column"
                 style={{ width: '130px' }}
               >
+                <Typography variant="body2">{pool.name}</Typography>
                 {pool.seeds.map((seed) => (
                   <Typography
                     key={seed.id}
@@ -541,6 +543,17 @@ export default function SelectedEvent({
             />
           ))}
         </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setOpen(false);
+              reflow();
+            }}
+          >
+            Force Reflow
+          </Button>
+        </DialogActions>
       </Dialog>
       {editing ? (
         <LocalEvent

@@ -559,9 +559,9 @@ export default async function setupIPCs() {
       throw new Error(`no phaseLinks found for phase ${phaseId}`);
     }
 
-    const destPhaseLinks = phaseLinks.filter(
-      (phaseLink) => phaseLink.destPhaseId === phaseId,
-    );
+    const destPhaseLinks = phaseLinks
+      .filter((phaseLink) => phaseLink.destPhaseId === phaseId)
+      .sort((a, b) => a.destSeedOrder - b.destSeedOrder);
     const directDestPhaseLinks = destPhaseLinks.filter(
       (destPhaseLink) => destPhaseLink.type === 3,
     );
@@ -575,29 +575,60 @@ export default async function setupIPCs() {
     entrantIds.forEach((entrantId) => {
       initialEntrants[entrantId] = true;
     });
-    if (directDestPhaseLinks.length === 1) {
-      directDestPhaseLinks[0].destSeedOrder = -1;
-      directDestPhaseLinks[0].entrantIds = entrantIds;
-      directDestPhaseLinks[0].initialEntrants = initialEntrants;
-      directDestPhaseLinks[0].numSeeds = entrantIds.length;
-    } else {
-      destPhaseLinks.push({
+
+    // no existing direct destPhaseLink
+    if (directDestPhaseLinks.length === 0) {
+      destPhaseLinks.unshift({
         destPhaseId: phaseId,
         maintainMatchup: false,
         isDefault: false,
         entrantIds,
         type: 3,
-        destSeedOrder: -1,
         destBracketSide: 1,
         cId: `${phaseId}-1`,
         initialEntrants,
         numSeeds: entrantIds.length,
       });
+      destPhaseLinks.forEach((destPhaseLink, i) => {
+        destPhaseLink.destSeedOrder = i;
+      });
+      await fetchWithCookie(
+        `https://www.start.gg/api/-/rest/phase/${phaseId}`,
+        'PUT',
+        JSON.stringify({ destPhaseLinks }),
+      );
+      return;
     }
+
+    // existing direct destPhaseLink
+    const [directDestPhaseLink] = directDestPhaseLinks;
+    const nonDirectDestPhaseLinks = destPhaseLinks.filter(
+      (destPhaseLink) => destPhaseLink.type !== 3,
+    );
+    const newOrderedDestPhaseLinks = [
+      directDestPhaseLink,
+      ...nonDirectDestPhaseLinks,
+    ];
+    newOrderedDestPhaseLinks.forEach((destPhaseLink, i) => {
+      destPhaseLink.destSeedOrder = i;
+    });
+
+    directDestPhaseLink.entrantIds = [];
+    directDestPhaseLink.initialEntrants = {};
+    directDestPhaseLink.numSeeds = 0;
     await fetchWithCookie(
       `https://www.start.gg/api/-/rest/phase/${phaseId}`,
       'PUT',
-      JSON.stringify({ destPhaseLinks }),
+      JSON.stringify({ destPhaseLinks: newOrderedDestPhaseLinks }),
+    );
+
+    directDestPhaseLink.entrantIds = entrantIds;
+    directDestPhaseLink.initialEntrants = initialEntrants;
+    directDestPhaseLink.numSeeds = entrantIds.length;
+    await fetchWithCookie(
+      `https://www.start.gg/api/-/rest/phase/${phaseId}`,
+      'PUT',
+      JSON.stringify({ destPhaseLinks: newOrderedDestPhaseLinks }),
     );
   };
   ipcMain.removeHandler('reflow');
