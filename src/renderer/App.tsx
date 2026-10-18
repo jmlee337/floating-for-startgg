@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
 import { lt } from 'semver';
 import {
+  SeedsStatus,
   RendererEvent,
   RendererTournament,
   SelectableEvent,
@@ -298,6 +299,7 @@ function Hello() {
                                   ...newSelectedEvent,
                                   seeds: { phases: [], raw: [] },
                                   configuredPhases: [],
+                                  seedsStatus: SeedsStatus.FIXED,
                                 });
                                 setGettingEvent(true);
                                 setSelectedEvent(

@@ -9,6 +9,7 @@ import {
   Seed,
   ConfiguredPhase,
   Player,
+  SeedsStatus,
 } from '../common/types';
 import { mkdirSync } from 'fs';
 import path from 'path';
@@ -57,6 +58,18 @@ const PHASE_SEEDS_QUERY = `
           }
         }
       }
+    }
+  }
+`;
+
+const UPDATE_PHASE_SEEDS_MUTATION = `
+  mutation updatePhaseSeeds($phaseId: ID!, $seedMapping: [UpdatePhaseSeedInfo]!) {
+    updatePhaseSeeding(
+      phaseId: $phaseId
+      seedMapping: $seedMapping
+      options: { strictMode: false }
+    ) {
+      id
     }
   }
 `;
@@ -353,6 +366,148 @@ export default async function setupIPCs() {
     },
   );
 
+  const maybeFixSeeds = async (
+    phases: Phase[],
+  ): Promise<{ shouldRefresh: boolean; seedsStatus: SeedsStatus }> => {
+    const poolIdToSeeds = new Map(
+      phases.flatMap((phase) =>
+        phase.pools.map((pool) => [pool.id, pool.seeds]),
+      ),
+    );
+    let reflowRequired = false;
+    let fixUnsupported = false;
+    let shouldRefresh = false;
+    for (const phase of phases) {
+      let progressingInSeedsPerPool = -1;
+      let directSeedsPerPool = -1;
+      const k = phase.pools.length * 2;
+      if (
+        phase.pools.some((pool) => {
+          const progressingInSeeds = pool.seeds.filter((seed) => seed.origin);
+          if (progressingInSeedsPerPool === -1) {
+            progressingInSeedsPerPool = progressingInSeeds.length;
+          } else if (progressingInSeedsPerPool !== progressingInSeeds.length) {
+            return true;
+          }
+
+          const directSeeds = pool.seeds.filter((seed) => seed.entrant);
+          if (directSeedsPerPool === -1) {
+            directSeedsPerPool = directSeeds.length;
+          } else if (directSeedsPerPool !== directSeeds.length) {
+            return true;
+          }
+
+          for (let i = 0; i < directSeeds.length - 1; i++) {
+            const multiplier = i + 1;
+            if (
+              directSeeds[i].seedNum + directSeeds[i + 1].seedNum !==
+              multiplier * k + 1
+            ) {
+              return true;
+            }
+          }
+          return false;
+        })
+      ) {
+        reflowRequired = true;
+        continue;
+      }
+      if (progressingInSeedsPerPool === 0 || directSeedsPerPool === 0) {
+        continue;
+      }
+      if (phase.bracketType !== 3 || progressingInSeedsPerPool !== 2) {
+        fixUnsupported = true;
+        continue;
+      }
+
+      const expectedPools = phase.pools.map((pool) => {
+        const directSeedNums = pool.seeds
+          .filter((seed) => seed.entrant)
+          .map((seed) => seed.seedNum);
+        const lastI = directSeedNums.length - 1;
+        const multiplier = lastI + 1;
+        const progressingSeedNum1 =
+          multiplier * k + 1 - directSeedNums[directSeedNums.length - 1];
+        const progressingSeedNum2 = progressingSeedNum1 + phase.pools.length;
+        return {
+          id: pool.id,
+          expectedSeedNums: [
+            ...directSeedNums,
+            progressingSeedNum1,
+            progressingSeedNum2,
+          ],
+        };
+      });
+      if (
+        phase.pools.every((pool, i) => {
+          const { expectedSeedNums } = expectedPools[i];
+          return pool.seeds.every(
+            (seed, j) => seed.seedNum === expectedSeedNums[j],
+          );
+        })
+      ) {
+        continue;
+      }
+
+      const progressingInSeeds = phase.pools.flatMap((pools) =>
+        pools.seeds.filter((seed) => seed.origin),
+      );
+      const seedNumStart = progressingInSeeds
+        .map((seed) => seed.seedNum)
+        .reduce((prev, curr) => Math.min(prev, curr), Number.MAX_SAFE_INTEGER);
+      const expectedSeedNumToPoolId = new Map<number, number>();
+      expectedPools.forEach((expectedPool) => {
+        expectedPool.expectedSeedNums
+          .filter((seedNum) => seedNum >= seedNumStart)
+          .forEach((seedNum) => {
+            expectedSeedNumToPoolId.set(seedNum, expectedPool.id);
+          });
+      });
+      const seedMapping = progressingInSeeds
+        .map((seed) => {
+          const origin = seed.origin!;
+          const seeds = poolIdToSeeds.get(origin.poolId);
+          if (!seeds) {
+            throw new Error(`pool ${origin.poolId} not found`);
+          }
+          const index = origin.placement - 1;
+          if (index >= seeds.length) {
+            throw new Error(
+              `pool ${origin.poolId} seeds length ${seeds.length} vs placement ${origin.placement}`,
+            );
+          }
+          const seedNum = seeds[index].seedNum;
+          return {
+            id: seed.id,
+            origin: {
+              ...origin,
+              seedNum,
+            },
+          };
+        })
+        .sort((a, b) => a.origin.seedNum - b.origin.seedNum)
+        .map((seed, i) => {
+          const seedNum = seedNumStart + i;
+          const phaseGroupId = expectedSeedNumToPoolId.get(seedNum);
+          if (phaseGroupId === undefined) {
+            throw new Error(`poolId not found for seedNum: ${seedNum}`);
+          }
+          return { seedId: seed.id, seedNum, phaseGroupId };
+        });
+      await fetchGqlWithCookie(UPDATE_PHASE_SEEDS_MUTATION, {
+        phaseId: phase.id,
+        seedMapping,
+      });
+      shouldRefresh = true;
+    }
+    let seedsStatus = SeedsStatus.FIXED;
+    if (reflowRequired) {
+      seedsStatus = SeedsStatus.REFLOW_REQUIRED;
+    } else if (fixUnsupported) {
+      seedsStatus = SeedsStatus.FIX_UNSUPPORTED;
+    }
+    return { shouldRefresh, seedsStatus };
+  };
   const getEvent = async (event: SelectableEvent): Promise<RendererEvent> => {
     const eventJson = await fetchWithCookie(
       `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&expand[]=phase&expand[]=groups&mutations[]=playerData&bustCache`,
@@ -510,6 +665,11 @@ export default async function setupIPCs() {
       raw.push(...phaseSeeds.map((seed) => seed.entrant!));
     });
 
+    const maybeFixSeedsRes = await maybeFixSeeds(seedPhases);
+    if (maybeFixSeedsRes.shouldRefresh) {
+      return getEvent(event);
+    }
+
     return {
       ...event,
       seeds: {
@@ -519,6 +679,7 @@ export default async function setupIPCs() {
       configuredPhases: db
         .prepare('SELECT * FROM phases WHERE eventId = @eventId')
         .all({ eventId: event.id }) as ConfiguredPhase[],
+      seedsStatus: maybeFixSeedsRes.seedsStatus,
     };
   };
   ipcMain.removeHandler('getEvent');

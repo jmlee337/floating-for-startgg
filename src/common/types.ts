@@ -3,9 +3,16 @@ export type SelectableEvent = {
   name: string;
 };
 
+export enum SeedsStatus {
+  FIXED,
+  FIX_UNSUPPORTED,
+  REFLOW_REQUIRED,
+}
+
 export type RendererEvent = SelectableEvent & {
   seeds: RendererSeeds;
   configuredPhases: ConfiguredPhase[];
+  seedsStatus: SeedsStatus;
 };
 
 export type SelectableTournament = {

@@ -21,6 +21,7 @@ import {
   Phase,
   RendererEvent,
   Seed,
+  SeedsStatus,
 } from '../common/types';
 import { useMemo, useState } from 'react';
 
@@ -455,6 +456,11 @@ export default function SelectedEvent({
           }
         >
           Entrant reflow required
+        </Alert>
+      )}
+      {event.seedsStatus === SeedsStatus.FIX_UNSUPPORTED && (
+        <Alert severity="warning">
+          Rematch detction unsupported for this format
         </Alert>
       )}
       {fullyConfigured && configurationMatches && properlyFlowed && (
