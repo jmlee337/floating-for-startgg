@@ -309,6 +309,7 @@ function LocalEvent({
     <>
       <StartggEvent phases={actualPhases} />
       <LocalSeedsList
+        phases={phases}
         mutableLocalSeeds={mutableLocalSeeds}
         setMutableLocalSeeds={setMutableLocalSeeds}
       />

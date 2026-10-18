@@ -1,36 +1,27 @@
-import { Entrant } from '../common/types';
+import { Entrant, Phase } from '../common/types';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { move } from '@dnd-kit/helpers';
-import { Dispatch, SetStateAction, useRef, useState } from 'react';
+import { Dispatch, SetStateAction } from 'react';
 import {
   List,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  ListSubheader,
   Typography,
 } from '@mui/material';
 import { DragIndicator } from '@mui/icons-material';
 
 function Sortable({ entrant, index }: { entrant: Entrant; index: number }) {
-  const [element, setElement] = useState<Element | null>(null);
-  const handleRef = useRef<HTMLButtonElement | null>(null);
-  const { isDragging } = useSortable({
+  const { ref, handleRef } = useSortable({
     id: entrant.id,
     index,
-    element,
-    handle: handleRef,
-    data: entrant,
   });
 
   return (
-    <ListItem
-      disablePadding
-      ref={setElement}
-      data-shadow={isDragging || undefined}
-      style={{ gap: '8px' }}
-    >
+    <ListItem disablePadding ref={ref} style={{ gap: '8px' }}>
       <ListItemButton
         component="button"
         ref={handleRef}
@@ -51,9 +42,11 @@ function Sortable({ entrant, index }: { entrant: Entrant; index: number }) {
 }
 
 export default function LocalSeedsList({
+  phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
 }: {
+  phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
 }) {
@@ -64,8 +57,25 @@ export default function LocalSeedsList({
       }}
     >
       <List>
-        {mutableLocalSeeds.map((entrant, i) => (
-          <Sortable key={entrant.id} entrant={entrant} index={i} />
+        {phases.map((phase) => (
+          <>
+            <ListSubheader key={phase.id}>{phase.name}</ListSubheader>
+            {mutableLocalSeeds
+              .slice(
+                phase.seedNumOffset,
+                phase.seedNumOffset +
+                  phase.pools.flatMap((pool) =>
+                    pool.seeds.filter((seed) => seed.entrant),
+                  ).length,
+              )
+              .map((entrant, i) => (
+                <Sortable
+                  key={entrant.id}
+                  entrant={entrant}
+                  index={i + phase.seedNumOffset}
+                />
+              ))}
+          </>
         ))}
       </List>
     </DragDropProvider>

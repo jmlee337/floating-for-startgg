@@ -15,9 +15,23 @@ import { mkdirSync } from 'fs';
 import path from 'path';
 import DatabaseContstructor from 'better-sqlite3';
 
-type SeedPhase = Phase & {
+type SeedPhase = Omit<Phase, 'seedNumOffset'> & {
   phaseOrder: number;
 };
+function toPhases(seedPhases: SeedPhase[]): Phase[] {
+  let seedNumOffset = 0;
+  const phases: Phase[] = [];
+  for (const seedPhase of seedPhases) {
+    phases.push({
+      ...seedPhase,
+      seedNumOffset,
+    });
+    seedNumOffset += seedPhase.pools.flatMap((pool) =>
+      pool.seeds.filter((seed) => seed.entrant),
+    ).length;
+  }
+  return phases;
+}
 
 type DbSeed = {
   entrantId: number;
@@ -367,7 +381,7 @@ export default async function setupIPCs() {
   );
 
   const maybeFixSeeds = async (
-    phases: Phase[],
+    phases: SeedPhase[],
   ): Promise<{ shouldRefresh: boolean; seedsStatus: SeedsStatus }> => {
     const poolIdToSeeds = new Map(
       phases.flatMap((phase) =>
@@ -673,7 +687,7 @@ export default async function setupIPCs() {
     return {
       ...event,
       seeds: {
-        phases: seedPhases,
+        phases: toPhases(seedPhases),
         raw,
       },
       configuredPhases: db
