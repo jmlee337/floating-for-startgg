@@ -826,6 +826,56 @@ export default async function setupIPCs() {
     },
   );
 
+  ipcMain.removeHandler('uploadSeeds');
+  ipcMain.handle(
+    'uploadSeeds',
+    async (
+      ev,
+      selectedEvent: SelectableEvent,
+      entrants: Entrant[],
+    ): Promise<RendererEvent> => {
+      const event = await getEvent(selectedEvent);
+      const expectedEntrantIds = new Set(
+        event.seeds.raw.map((entrant) => entrant.id),
+      );
+      entrants.forEach((entrant) => {
+        if (!expectedEntrantIds.delete(entrant.id)) {
+          throw new Error('start.gg entrants changed, download required');
+        }
+      });
+      if (expectedEntrantIds.size !== 0) {
+        throw new Error('start.gg entrants changed, download required');
+      }
+
+      const idToConfiguredPhase = new Map(
+        event.configuredPhases.map((configuredPhase) => [
+          configuredPhase.id,
+          configuredPhase,
+        ]),
+      );
+      for (const phase of event.seeds.phases) {
+        if (entrants.length === 0) {
+          break;
+        }
+
+        const configuredPhase = idToConfiguredPhase.get(phase.id);
+        if (!configuredPhase) {
+          continue;
+        }
+
+        const numEntrants =
+          configuredPhase.progressingInPerPool === 0
+            ? entrants.length
+            : configuredPhase.directInPerPool * phase.pools.length;
+        const entrantIds = entrants
+          .splice(0, numEntrants)
+          .map((entrant) => entrant.id);
+        await putDirect(phase.id, entrantIds);
+      }
+      return await getEvent(selectedEvent);
+    },
+  );
+
   ipcMain.removeHandler('updateLocalSeeds');
   ipcMain.handle(
     'updateLocalSeeds',

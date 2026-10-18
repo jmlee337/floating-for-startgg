@@ -33,6 +33,7 @@ import {
   RendererTournament,
   SelectableEvent,
   SelectableTournament,
+  Entrant,
 } from '../common/types';
 import SelectTournament from './SelectTournament';
 import SelectEvent from './SelectEvent';
@@ -273,6 +274,23 @@ function Hello() {
                                 setGettingEvent(true);
                                 setSelectedEvent(
                                   await window.electron.reflow(selectedEvent),
+                                );
+                              } catch (e: unknown) {
+                                if (e instanceof Error) {
+                                  openError(e.message);
+                                }
+                              } finally {
+                                setGettingEvent(false);
+                              }
+                            }}
+                            uploadSeeds={async (entrants: Entrant[]) => {
+                              try {
+                                setGettingEvent(true);
+                                setSelectedEvent(
+                                  await window.electron.uploadSeeds(
+                                    selectedEvent,
+                                    entrants,
+                                  ),
                                 );
                               } catch (e: unknown) {
                                 if (e instanceof Error) {

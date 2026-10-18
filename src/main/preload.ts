@@ -32,6 +32,11 @@ const electronHandler = {
     ipcRenderer.invoke('getConfiguredPhase', phaseId),
   reflow: (selectableEvent: SelectableEvent): Promise<RendererEvent> =>
     ipcRenderer.invoke('reflow', selectableEvent),
+  uploadSeeds: (
+    selectableEvent: SelectableEvent,
+    entrants: Entrant[],
+  ): Promise<RendererEvent> =>
+    ipcRenderer.invoke('uploadSeeds', selectableEvent, entrants),
   updateLocalSeeds: (eventId: number, entrants: Entrant[]): Promise<void> =>
     ipcRenderer.invoke('updateLocalSeeds', eventId, entrants),
   getLocalSeeds: (eventId: number): Promise<Entrant[]> =>

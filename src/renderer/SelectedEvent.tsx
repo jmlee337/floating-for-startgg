@@ -23,7 +23,9 @@ import {
   Seed,
   SeedsStatus,
 } from '../common/types';
-import { useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, useMemo, useState } from 'react';
+import LocalSeedsList from './LocalSeedsList';
+import { CloudDownload, CloudUpload, Restore, Save } from '@mui/icons-material';
 
 function getDirectInPerPool(phase: Phase) {
   if (phase.pools.length === 0) {
@@ -262,13 +264,15 @@ function StartggEvent({ phases }: { phases: Phase[] }) {
 
 function LocalEvent({
   phases,
-  localSeeds,
+  mutableLocalSeeds,
+  setMutableLocalSeeds,
 }: {
   phases: Phase[];
-  localSeeds: Entrant[];
+  mutableLocalSeeds: Entrant[];
+  setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
 }) {
   const actualPhases = useMemo(() => {
-    const remainingEntrants = new Array(...localSeeds);
+    const remainingEntrants = new Array(...mutableLocalSeeds);
     const ret: Phase[] = [];
     for (const phase of phases) {
       if (remainingEntrants.length === 0) {
@@ -299,17 +303,27 @@ function LocalEvent({
       });
     }
     return ret;
-  }, [phases, localSeeds]);
+  }, [phases, mutableLocalSeeds]);
 
-  return <StartggEvent phases={actualPhases} />;
+  return (
+    <>
+      <StartggEvent phases={actualPhases} />
+      <LocalSeedsList
+        mutableLocalSeeds={mutableLocalSeeds}
+        setMutableLocalSeeds={setMutableLocalSeeds}
+      />
+    </>
+  );
 }
 
 export default function SelectedEvent({
   event,
   reflow,
+  uploadSeeds,
 }: {
   event: RendererEvent;
   reflow: () => Promise<void>;
+  uploadSeeds: (localSeeds: Entrant[]) => Promise<void>;
 }) {
   const {
     idToConfiguredPhase,
@@ -395,12 +409,27 @@ export default function SelectedEvent({
   const [dirty, setDirty] = useState(false);
 
   const [editing, setEditing] = useState(false);
-  const [localSeeds, setLocalSeeds] = useState<Entrant[]>([]);
+  const [dbLocalSeeds, setDbLocalSeeds] = useState<Entrant[]>([]);
+  const dbSeedsUnchanged = useMemo(
+    () =>
+      dbLocalSeeds.every((entrant, i) => entrant.id === event.seeds.raw[i].id),
+    [dbLocalSeeds, event.seeds.raw],
+  );
+
+  const [mutableLocalSeeds, setMutableLocalSeeds] = useState<Entrant[]>([]);
+  const mutableSeedsUnchanged = useMemo(
+    () =>
+      dbLocalSeeds.every(
+        (entrant, i) => entrant.id === mutableLocalSeeds[i].id,
+      ),
+    [dbLocalSeeds, mutableLocalSeeds],
+  );
 
   return (
     <Stack
       direction="column"
       style={{
+        alignItems: 'start',
         paddingTop: '8px',
         paddingLeft: '8px',
         paddingRight: '8px',
@@ -468,8 +497,10 @@ export default function SelectedEvent({
           direction="row"
           style={{
             alignItems: 'center',
+            boxSizing: 'border-box',
             justifyContent: 'space-between',
             paddingLeft: '36px',
+            width: '100%',
           }}
         >
           <Typography variant="body1" style={{ margin: '4px 0' }}>
@@ -477,6 +508,62 @@ export default function SelectedEvent({
           </Typography>
           {editing ? (
             <Stack direction="row" style={{ gap: '8px' }}>
+              <Button
+                disabled={dbSeedsUnchanged}
+                color="error"
+                size="small"
+                variant="contained"
+                endIcon={<CloudDownload />}
+                onClick={async () => {
+                  const newLocalSeeds = event.seeds.raw;
+                  await window.electron.updateLocalSeeds(
+                    event.id,
+                    newLocalSeeds,
+                  );
+                  setDbLocalSeeds(newLocalSeeds);
+                  setMutableLocalSeeds(newLocalSeeds);
+                }}
+              >
+                Download
+              </Button>
+              <Button
+                disabled={dbSeedsUnchanged}
+                size="small"
+                variant="contained"
+                endIcon={<CloudUpload />}
+                onClick={() => {
+                  uploadSeeds(dbLocalSeeds);
+                }}
+              >
+                Upload
+              </Button>
+              <Button
+                disabled={mutableSeedsUnchanged}
+                color="warning"
+                size="small"
+                variant="contained"
+                endIcon={<Restore />}
+                onClick={() => {
+                  setMutableLocalSeeds(dbLocalSeeds);
+                }}
+              >
+                Revert
+              </Button>
+              <Button
+                disabled={mutableSeedsUnchanged}
+                size="small"
+                variant="contained"
+                endIcon={<Save />}
+                onClick={async () => {
+                  await window.electron.updateLocalSeeds(
+                    event.id,
+                    mutableLocalSeeds,
+                  );
+                  setDbLocalSeeds(mutableLocalSeeds);
+                }}
+              >
+                Save
+              </Button>
               <Button
                 size="small"
                 variant="contained"
@@ -513,7 +600,8 @@ export default function SelectedEvent({
                       newLocalSeeds,
                     );
                   }
-                  setLocalSeeds(newLocalSeeds);
+                  setDbLocalSeeds(newLocalSeeds);
+                  setMutableLocalSeeds(newLocalSeeds);
                   setEditing(true);
                 }}
               >
@@ -566,7 +654,8 @@ export default function SelectedEvent({
           phases={event.seeds.phases.filter(
             (phase) => idToDirectInPerPool.get(phase.id) ?? 0 !== 0,
           )}
-          localSeeds={localSeeds}
+          mutableLocalSeeds={mutableLocalSeeds}
+          setMutableLocalSeeds={setMutableLocalSeeds}
         />
       ) : (
         <StartggEvent
