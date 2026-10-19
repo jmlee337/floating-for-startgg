@@ -89,6 +89,14 @@ const UPDATE_PHASE_SEEDS_MUTATION = `
   }
 `;
 
+const PLAYER_URL_QUERY = `
+  query playerUrl($playerId: ID!) {
+    player(id: $playerId) {
+      url
+    }
+  }
+`;
+
 export default async function setupIPCs(mainWindow: BrowserWindow) {
   const store = new Store<{
     base64EncryptedPassword: string;
@@ -1166,4 +1174,17 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
 
     return entrants;
   });
+
+  ipcMain.removeHandler('openUserPage');
+  ipcMain.handle(
+    'openUserPage',
+    async (event, playerId: number, gamerTag: string) => {
+      const data = await fetchGqlWithCookie(PLAYER_URL_QUERY, { playerId });
+      const url = data?.player?.url;
+      if (!url) {
+        throw new Error(`No user page for ${gamerTag} (${playerId})`);
+      }
+      return shell.openExternal(url);
+    },
+  );
 }

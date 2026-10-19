@@ -268,10 +268,12 @@ function LocalEvent({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
+  showError,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
+  showError: (message: string) => void;
 }) {
   const actualPhases = useMemo(() => {
     const remainingEntrants = new Array(...mutableLocalSeeds);
@@ -323,6 +325,7 @@ function LocalEvent({
         phases={phases}
         mutableLocalSeeds={mutableLocalSeeds}
         setMutableLocalSeeds={setMutableLocalSeeds}
+        showError={showError}
       />
     </>
   );
@@ -332,10 +335,12 @@ export default function SelectedEvent({
   event,
   reflow,
   uploadSeeds,
+  showError,
 }: {
   event: RendererEvent;
   reflow: () => Promise<void>;
   uploadSeeds: (localSeeds: Entrant[]) => Promise<void>;
+  showError: (message: string) => void;
 }) {
   const {
     idToConfiguredPhase,
@@ -680,6 +685,7 @@ export default function SelectedEvent({
           )}
           mutableLocalSeeds={mutableLocalSeeds}
           setMutableLocalSeeds={setMutableLocalSeeds}
+          showError={showError}
         />
       ) : (
         <StartggEvent

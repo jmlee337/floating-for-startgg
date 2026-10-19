@@ -41,6 +41,8 @@ const electronHandler = {
     ipcRenderer.invoke('updateLocalSeeds', eventId, entrants),
   getLocalSeeds: (eventId: number): Promise<Entrant[]> =>
     ipcRenderer.invoke('getLocalSeeds', eventId),
+  openUserPage: (playerId: number, gamerTag: string): Promise<void> =>
+    ipcRenderer.invoke('openUserPage', playerId, gamerTag),
   onMessage: (callback: (event: IpcRendererEvent, message: string) => void) => {
     ipcRenderer.removeAllListeners('message');
     ipcRenderer.on('message', callback);

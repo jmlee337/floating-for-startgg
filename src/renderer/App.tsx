@@ -329,6 +329,9 @@ function Hello() {
                                 setGettingEvent(false);
                               }
                             }}
+                            showError={(message: string) => {
+                              openError(message);
+                            }}
                           />
                         )}
                       </>
