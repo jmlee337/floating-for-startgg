@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import {
   ConfiguredPhase,
   Entrant,
@@ -41,6 +41,10 @@ const electronHandler = {
     ipcRenderer.invoke('updateLocalSeeds', eventId, entrants),
   getLocalSeeds: (eventId: number): Promise<Entrant[]> =>
     ipcRenderer.invoke('getLocalSeeds', eventId),
+  onMessage: (callback: (event: IpcRendererEvent, message: string) => void) => {
+    ipcRenderer.removeAllListeners('message');
+    ipcRenderer.on('message', callback);
+  },
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

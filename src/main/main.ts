@@ -84,7 +84,7 @@ const createWindow = async () => {
     return { action: 'deny' };
   });
 
-  setupIPCs();
+  setupIPCs(mainWindow);
   await mainWindow.loadURL(resolveHtmlPath('index.html'));
 };
 

@@ -127,6 +127,23 @@ function Hello() {
       }
     })();
   }, [getTournaments]);
+
+  const [messages, setMessages] = useState<
+    { message: string; timestamp: number }[]
+  >([]);
+  useEffect(() => {
+    window.electron.onMessage((event, message) => {
+      if (!message) {
+        setMessages([]);
+      } else {
+        setMessages((oldMessages) => {
+          const newMessages = [...oldMessages];
+          newMessages.push({ message, timestamp: Date.now() });
+          return newMessages;
+        });
+      }
+    });
+  }, []);
   return (
     <>
       <AppBar
@@ -266,6 +283,18 @@ function Hello() {
                             </span>
                           </Tooltip>
                         </Stack>
+                        {gettingEvent && (
+                          <Stack direction="column" style={{ padding: '8px' }}>
+                            {messages.map((message) => (
+                              <Typography
+                                key={message.timestamp}
+                                variant="caption"
+                              >
+                                {message.message}
+                              </Typography>
+                            ))}
+                          </Stack>
+                        )}
                         {!gettingEvent && (
                           <SelectedEvent
                             event={selectedEvent}

@@ -1,4 +1,4 @@
-import { app, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
 import Store from 'electron-store';
 import {
   SelectableEvent,
@@ -88,7 +88,7 @@ const UPDATE_PHASE_SEEDS_MUTATION = `
   }
 `;
 
-export default async function setupIPCs() {
+export default async function setupIPCs(mainWindow: BrowserWindow) {
   const store = new Store<{
     base64EncryptedPassword: string;
     email: string;
@@ -508,6 +508,10 @@ export default async function setupIPCs() {
           }
           return { seedId: seed.id, seedNum, phaseGroupId };
         });
+      mainWindow.webContents.send(
+        'message',
+        `fixing phase seeding ${phase.id}`,
+      );
       await fetchGqlWithCookie(UPDATE_PHASE_SEEDS_MUTATION, {
         phaseId: phase.id,
         seedMapping,
@@ -523,6 +527,7 @@ export default async function setupIPCs() {
     return { shouldRefresh, seedsStatus };
   };
   const getEvent = async (event: SelectableEvent): Promise<RendererEvent> => {
+    mainWindow.webContents.send('message', `fetching event ${event.id}`);
     const eventJson = await fetchWithCookie(
       `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&expand[]=phase&expand[]=groups&mutations[]=playerData&bustCache`,
       'GET',
@@ -607,6 +612,7 @@ export default async function setupIPCs() {
         throw new Error(`no pools found for phase ${phase.id}`);
       }
 
+      mainWindow.webContents.send('message', `fetching phase ${phase.id}`);
       let page = 1;
       while (true) {
         const nextData = await fetchGqlWithCookie(PHASE_SEEDS_QUERY, {
@@ -697,7 +703,10 @@ export default async function setupIPCs() {
     };
   };
   ipcMain.removeHandler('getEvent');
-  ipcMain.handle('getEvent', (ev, event: SelectableEvent) => getEvent(event));
+  ipcMain.handle('getEvent', (ev, event: SelectableEvent) => {
+    mainWindow.webContents.send('message', '');
+    return getEvent(event);
+  });
 
   ipcMain.removeHandler('upsertConfiguredPhase');
   ipcMain.handle(
@@ -725,6 +734,7 @@ export default async function setupIPCs() {
   });
 
   const putDirect = async (phaseId: number, entrantIds: number[]) => {
+    mainWindow.webContents.send('message', `seeding phase ${phaseId}`);
     const phaseJson = await fetchWithCookie(
       `https://www.start.gg/api/-/rest/phase/${phaseId}?expand[]=phaseLink`,
       'GET',
@@ -810,6 +820,7 @@ export default async function setupIPCs() {
   ipcMain.handle(
     'reflow',
     async (ev, selectedEvent: SelectableEvent): Promise<RendererEvent> => {
+      mainWindow.webContents.send('message', '');
       const event = await getEvent(selectedEvent);
       const rawEntrantIds = event.seeds.raw.map((entrant) => entrant.id);
       const idToConfiguredPhase = new Map(
@@ -848,6 +859,7 @@ export default async function setupIPCs() {
       selectedEvent: SelectableEvent,
       entrants: Entrant[],
     ): Promise<RendererEvent> => {
+      mainWindow.webContents.send('message', '');
       const event = await getEvent(selectedEvent);
       const expectedEntrantIds = new Set(
         event.seeds.raw.map((entrant) => entrant.id),
