@@ -15,9 +15,7 @@ import { mkdirSync } from 'fs';
 import path from 'path';
 import DatabaseContstructor from 'better-sqlite3';
 
-type SeedPhase = Omit<Phase, 'seedNumOffset'> & {
-  phaseOrder: number;
-};
+type SeedPhase = Omit<Phase, 'seedNumOffset'>;
 function toPhases(seedPhases: SeedPhase[]): Phase[] {
   let seedNumOffset = 0;
   const phases: Phase[] = [];

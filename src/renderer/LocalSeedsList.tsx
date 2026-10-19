@@ -19,13 +19,16 @@ import { DragIndicator } from '@mui/icons-material';
 function Sortable({
   entrant,
   index,
+  phaseOrder,
   phaseAndFns,
 }: {
   entrant: Entrant;
   index: number;
+  phaseOrder: number;
   phaseAndFns: {
     phaseId: number;
     phaseName: string;
+    phaseOrder: number;
     fn: (index: number) => void;
   }[];
 }) {
@@ -39,6 +42,13 @@ function Sortable({
       disablePadding
       ref={ref}
       style={{ justifyContent: 'space-between' }}
+      sx={
+        index % 2 === 1
+          ? {
+              backgroundColor: (theme) => theme.palette.action.hover,
+            }
+          : undefined
+      }
     >
       <Stack direction="row" style={{ gap: '8px', alignItems: 'center' }}>
         <ListItemButton
@@ -66,6 +76,7 @@ function Sortable({
               phaseAndFn.fn(index);
             }}
           >
+            {phaseOrder < phaseAndFn.phaseOrder ? '↑' : '↓'}{' '}
             {phaseAndFn.phaseName}
           </Button>
         ))}
@@ -88,6 +99,7 @@ export default function LocalSeedsList({
       phases.map((phase) => ({
         phaseId: phase.id,
         phaseName: phase.name,
+        phaseOrder: phase.phaseOrder,
         fn: (index: number) => {
           setMutableLocalSeeds((oldMutableLocalSeeds) => {
             const newMutableLocalSeeds = [...oldMutableLocalSeeds];
@@ -122,6 +134,7 @@ export default function LocalSeedsList({
                   key={entrant.id}
                   entrant={entrant}
                   index={i + phase.seedNumOffset}
+                  phaseOrder={phase.phaseOrder}
                   phaseAndFns={phaseAndFns.filter(
                     (phaseAndFn) => phaseAndFn.phaseId !== phase.id,
                   )}

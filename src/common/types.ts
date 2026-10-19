@@ -63,6 +63,7 @@ export type Phase = {
    * 10 CIRCUIT
    */
   bracketType: number;
+  phaseOrder: number;
   seedNumOffset: number;
   pools: Pool[];
 };
