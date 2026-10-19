@@ -733,7 +733,11 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     return configuredPhase;
   });
 
-  const putDirect = async (phaseId: number, entrantIds: number[]) => {
+  const putDirect = async (
+    phaseId: number,
+    entrantIds: number[],
+    prevEntrantIds: number[],
+  ) => {
     mainWindow.webContents.send('message', `seeding phase ${phaseId}`);
     const phaseJson = await fetchWithCookie(
       `https://www.start.gg/api/-/rest/phase/${phaseId}?expand[]=phaseLink`,
@@ -787,17 +791,43 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
 
     // existing direct destPhaseLink
     const [directDestPhaseLink] = directDestPhaseLinks;
-    const nonDirectDestPhaseLinks = destPhaseLinks.filter(
-      (destPhaseLink) => destPhaseLink.type !== 3,
-    );
+    const nonDirectDestPhaseLinks = destPhaseLinks
+      .filter((destPhaseLink) => destPhaseLink.type !== 3)
+      .sort((a, b) => a.destSeedOrder - b.destSeedOrder);
     const newOrderedDestPhaseLinks = [
       directDestPhaseLink,
       ...nonDirectDestPhaseLinks,
     ];
-    newOrderedDestPhaseLinks.forEach((destPhaseLink, i) => {
-      destPhaseLink.destSeedOrder = i;
-    });
 
+    // check if changes actually needed
+    const orderCorrect = newOrderedDestPhaseLinks.every(
+      (destPhaseLink, i) => destPhaseLink.destSeedOrder === i,
+    );
+    if (!orderCorrect) {
+      newOrderedDestPhaseLinks.forEach((destPhaseLink, i) => {
+        destPhaseLink.destSeedOrder = i;
+      });
+    }
+    if (
+      entrantIds.length === prevEntrantIds.length &&
+      entrantIds.every((entrantId, i) => entrantId === prevEntrantIds[i])
+    ) {
+      // no entrant changes needed
+      if (orderCorrect) {
+        // no order changes needed
+        return;
+      }
+
+      // order changes needed
+      await fetchWithCookie(
+        `https://www.start.gg/api/-/rest/phase/${phaseId}`,
+        'PUT',
+        JSON.stringify({ destPhaseLinks: newOrderedDestPhaseLinks }),
+      );
+      return;
+    }
+
+    // entrant changes needed
     directDestPhaseLink.entrantIds = [];
     directDestPhaseLink.initialEntrants = {};
     directDestPhaseLink.numSeeds = 0;
@@ -845,7 +875,11 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
             ? rawEntrantIds.length
             : configuredPhase.directInPerPool * phase.pools.length;
         const entrantIds = rawEntrantIds.splice(0, numEntrants);
-        await putDirect(phase.id, entrantIds);
+        const prevEntrantIds = phase.pools
+          .flatMap((pool) => pool.seeds.filter((seed) => seed.entrant))
+          .sort((a, b) => a.seedNum - b.seedNum)
+          .map((seed) => seed.entrant!.id);
+        await putDirect(phase.id, entrantIds, prevEntrantIds);
       }
       return getEvent(selectedEvent);
     },
@@ -896,7 +930,11 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         const entrantIds = entrants
           .splice(0, numEntrants)
           .map((entrant) => entrant.id);
-        await putDirect(phase.id, entrantIds);
+        const prevEntrantIds = phase.pools
+          .flatMap((pool) => pool.seeds.filter((seed) => seed.entrant))
+          .sort((a, b) => a.seedNum - b.seedNum)
+          .map((seed) => seed.entrant!.id);
+        await putDirect(phase.id, entrantIds, prevEntrantIds);
       }
       return await getEvent(selectedEvent);
     },
