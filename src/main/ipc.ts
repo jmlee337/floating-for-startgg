@@ -10,6 +10,7 @@ import {
   ConfiguredPhase,
   SeedsStatus,
   Ranking,
+  Player,
 } from '../common/types';
 import { mkdirSync } from 'fs';
 import path from 'path';
@@ -37,11 +38,13 @@ type DbSeed = {
   seedNum: number;
 };
 
-type DbPlayer = {
-  id: number;
+type DbPlayerToEntrant = {
+  eventId: number;
+  playerId: number;
   entrantId: number;
-  gamerTag: string;
 };
+
+type DbPlayer = Omit<Player, 'rankings'>;
 
 type DbRanking = Ranking & {
   playerId: number;
@@ -89,10 +92,40 @@ const UPDATE_PHASE_SEEDS_MUTATION = `
   }
 `;
 
-const PLAYER_URL_QUERY = `
-  query playerUrl($playerId: ID!) {
-    player(id: $playerId) {
-      url
+const TOURNAMENT_PARTICIPANTS_QUERY = `
+  query players($slug: String, $eventId: ID, $videogameId: ID, $page: Int) {
+    tournament(slug: $slug) {
+      participants(
+        query: { page: $page, perPage: 512, filter: { eventIds: [$eventId] } }
+      ) {
+        pageInfo {
+          totalPages
+        }
+        nodes {
+          id
+          player {
+            id
+            gamerTag
+            rankings(videogameId: $videogameId) {
+              id
+              rank
+              iteration {
+                title
+                publishedAt
+                series {
+                  id
+                  locationType
+                  name
+                  images(type: "icon") {
+                    url
+                  }
+                }
+              }
+            }
+            url
+          }
+        }
+      }
     }
   }
 `;
@@ -125,6 +158,14 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     )`,
   ).run();
   db.prepare(
+    `CREATE TABLE IF NOT EXISTS playersToEntrant (
+      eventId INTEGER,
+      playerId INTEGER,
+      entrantId INTEGER,
+      PRIMARY KEY (playerId, entrantId)
+    )`,
+  ).run();
+  db.prepare(
     `CREATE TABLE IF NOT EXISTS players (
       id INTEGER PRIMARY KEY,
       eventId INTEGER,
@@ -132,6 +173,21 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       gamerTag TEXT
     )`,
   ).run();
+  try {
+    db.prepare('ALTER TABLE players DROP COLUMN entrantId').run();
+  } catch {
+    // just catch
+  }
+  try {
+    db.prepare('ALTER TABLE players DROP COLUMN eventId').run();
+  } catch {
+    // just catch
+  }
+  try {
+    db.prepare('ALTER TABLE players ADD COLUMN url TEXT').run();
+  } catch {
+    // just catch
+  }
   db.prepare(
     `CREATE TABLE IF NOT EXISTS rankings (
       id INTEGER PRIMARY KEY,
@@ -142,15 +198,38 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       iterationTitle TEXT,
       publishedAt INTEGER,
       locationType INTEGER,
-      seriesCreatedAt INTEGER
+      seriesId INTEGER
     )`,
   ).run();
+  const deleteInsertIntoPlayersToEntrant = (
+    eventId: number,
+    entrants: Entrant[],
+  ) => {
+    db.prepare('DELETE FROM playersToEntrant WHERE eventId = @eventId').run({
+      eventId,
+    });
+    entrants.forEach((entrant) => {
+      entrant.players.forEach((player) => {
+        db.prepare(
+          `INSERT INTO playersToEntrant (
+            eventId, playerId, entrantId
+          ) values (
+            @eventId, @playerId, @entrantId
+          )`,
+        ).run({
+          eventId,
+          playerId: player.id,
+          entrantId: entrant.id,
+        });
+      });
+    });
+  };
   const replaceIntoPlayers = (dbPlayer: DbPlayer) => {
     db.prepare(
       `REPLACE INTO players (
-        id, entrantId, gamerTag
+        id, gamerTag, url
       ) values (
-        @id, @entrantId, @gamerTag
+        @id, @gamerTag, @url
       )`,
     ).run(dbPlayer);
   };
@@ -165,7 +244,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         iterationTitle,
         publishedAt,
         locationType,
-        seriesCreatedAt
+        seriesId
       ) values (
         @id,
         @playerId,
@@ -175,7 +254,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         @iterationTitle,
         @publishedAt,
         @locationType,
-        @seriesCreatedAt
+        @seriesId
       )`,
     ).run(dbRanking);
   };
@@ -423,6 +502,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
             events.push({
               id: eventJson.id,
               name: eventJson.name,
+              videogameId: eventJson.videogameId,
             });
           }
         });
@@ -582,10 +662,59 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     }
     return { shouldRefresh, seedsStatus };
   };
-  const getEvent = async (event: SelectableEvent): Promise<RendererEvent> => {
+  const getEvent = async (
+    slug: string,
+    event: SelectableEvent,
+  ): Promise<RendererEvent> => {
     mainWindow.webContents.send('message', `fetching event ${event.id}`);
+
+    const participantIdToPlayer = new Map<number, Player>();
+    let page = 1;
+    while (true) {
+      const nextData = await fetchGqlWithCookie(TOURNAMENT_PARTICIPANTS_QUERY, {
+        slug,
+        eventId: event.id,
+        videogameId: event.videogameId,
+        page,
+      });
+
+      const { nodes } = nextData.tournament.participants;
+      if (Array.isArray(nodes)) {
+        nodes.forEach((node) => {
+          const rankings: Ranking[] = [];
+          const nodeRankings = node.player.rankings;
+          if (Array.isArray(nodeRankings)) {
+            nodeRankings.forEach((nodeRanking) => {
+              rankings.push({
+                id: nodeRanking.id,
+                rank: nodeRanking.rank,
+                iterationTitle: nodeRanking.iteration.title,
+                publishedAt: nodeRanking.iteration.publishedAt,
+                seriesId: nodeRanking.iteration.series.id,
+                seriesName: nodeRanking.iteration.series.name,
+                locationType: nodeRanking.iteration.series.locationType,
+                iconUrl: nodeRanking.iteration.series.images[0]?.url ?? null,
+              });
+            });
+          }
+          const player = {
+            id: node.player.id,
+            gamerTag: node.player.gamerTag,
+            rankings,
+            url: node.player.url,
+          };
+          participantIdToPlayer.set(node.id, player);
+        });
+      }
+
+      page += 1;
+      if (page > nextData.tournament.participants.pageInfo.totalPages) {
+        break;
+      }
+    }
+
     const eventJson = await fetchWithCookie(
-      `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&expand[]=phase&expand[]=groups&mutations[]=playerData&bustCache`,
+      `https://www.start.gg/api/-/rest/event/${event.id}?expand[]=entrants&expand[]=phase&expand[]=groups&bustCache`,
       'GET',
     );
     const jsonEvent = eventJson.entities?.event;
@@ -605,62 +734,6 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       throw new Error('no pools in response');
     }
 
-    const idToRankingSeries = new Map<
-      number,
-      {
-        name: string;
-        iconUrl: string | undefined;
-        locationType: number;
-        createdAt: number;
-      }
-    >();
-    const jsonRankingSerieses = eventJson.entities?.rankingSeries;
-    if (Array.isArray(jsonRankingSerieses)) {
-      jsonRankingSerieses
-        .filter(
-          (jsonRankingSeries) =>
-            jsonRankingSeries.videogameId === jsonEvent.videogameId,
-        )
-        .forEach((jsonRankingSeries) => {
-          let iconUrl: string | undefined;
-          const images = jsonRankingSeries.images;
-          if (Array.isArray(images)) {
-            const icons = images.filter((image) => image.type === 'icon');
-            if (icons.length > 0) {
-              iconUrl = icons[0].url;
-            }
-          }
-          idToRankingSeries.set(jsonRankingSeries.id, {
-            name: jsonRankingSeries.name,
-            iconUrl,
-            locationType: jsonRankingSeries.locationType,
-            createdAt: jsonRankingSeries.createdAt,
-          });
-        });
-    }
-
-    const idToRankingIteration = new Map<
-      number,
-      { title: string; publishedAt: number }
-    >();
-    const jsonRankingIterations = eventJson.entities?.rankingIteration;
-    if (Array.isArray(jsonRankingIterations)) {
-      // 400 days ago
-      const thresholdS = Math.floor(Date.now() / 1000) - 34560000;
-      jsonRankingIterations
-        .filter(
-          (jsonRankingIteration) =>
-            jsonRankingIteration.status === 3 &&
-            jsonRankingIteration.publishedAt > thresholdS,
-        )
-        .forEach((jsonRankingIteration) => {
-          idToRankingIteration.set(jsonRankingIteration.id, {
-            title: jsonRankingIteration.title,
-            publishedAt: jsonRankingIteration.publishedAt,
-          });
-        });
-    }
-
     const idToEntrant = new Map<number, Entrant>();
     jsonEntrants.forEach((entrant) => {
       const id = entrant.id;
@@ -671,56 +744,15 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       if (!Array.isArray(participantIds)) {
         return;
       }
-      const playerIds = entrant.playerIds;
-      if (!(playerIds instanceof Object)) {
-        return;
-      }
-      const players = entrant.mutations.players;
-      if (!(players instanceof Object)) {
-        return;
-      }
 
       const entrantPlayers = participantIds.map((participantId) => {
-        const playerId = entrant.playerIds[participantId];
-        if (!playerId) {
+        const player = participantIdToPlayer.get(participantId);
+        if (!player) {
           throw new Error(
-            `no playerId for participant ${participantId} in entrant ${id}`,
+            `no player for participant: ${participantId} in entrant ${id}`,
           );
         }
-        const player = players[playerId];
-        if (!player) {
-          throw new Error(`player ${playerId} not found in entrant ${id}`);
-        }
-
-        const rankings: Ranking[] = [];
-        const jsonRankings = player.rankings;
-        if (Array.isArray(jsonRankings)) {
-          jsonRankings
-            .filter((jsonRanking) => jsonRanking.active)
-            .forEach((jsonRanking) => {
-              const rankingIteration = idToRankingIteration.get(
-                jsonRanking.iterationId,
-              );
-              if (!rankingIteration) {
-                return;
-              }
-              const rankingSeries = idToRankingSeries.get(jsonRanking.seriesId);
-              if (!rankingSeries) {
-                return;
-              }
-              rankings.push({
-                id: jsonRanking.id,
-                rank: jsonRanking.rank,
-                seriesName: rankingSeries.name,
-                iconUrl: rankingSeries.iconUrl ?? null,
-                iterationTitle: rankingIteration.title,
-                publishedAt: rankingIteration.publishedAt,
-                locationType: rankingSeries.locationType,
-                seriesCreatedAt: rankingSeries.createdAt,
-              });
-            });
-        }
-        return { id: playerId, gamerTag: player.gamerTag, rankings };
+        return player;
       });
       idToEntrant.set(id, { id, players: entrantPlayers });
     });
@@ -757,7 +789,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       }
 
       mainWindow.webContents.send('message', `fetching phase ${phase.id}`);
-      let page = 1;
+      page = 1;
       while (true) {
         const nextData = await fetchGqlWithCookie(PHASE_SEEDS_QUERY, {
           phaseId: phase.id,
@@ -831,18 +863,15 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
 
     const maybeFixSeedsRes = await maybeFixSeeds(seedPhases);
     if (maybeFixSeedsRes.shouldRefresh) {
-      return getEvent(event);
+      return getEvent(slug, event);
     }
 
     // update players
     db.transaction(() => {
+      deleteInsertIntoPlayersToEntrant(event.id, raw);
       raw.forEach((entrant) => {
         entrant.players.forEach((player) => {
-          const dbPlayer: DbPlayer = {
-            ...player,
-            entrantId: entrant.id,
-          };
-          replaceIntoPlayers(dbPlayer);
+          replaceIntoPlayers(player);
           const dbRankings: DbRanking[] = player.rankings.map((ranking) => ({
             ...ranking,
             playerId: player.id,
@@ -865,9 +894,9 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     };
   };
   ipcMain.removeHandler('getEvent');
-  ipcMain.handle('getEvent', (ev, event: SelectableEvent) => {
+  ipcMain.handle('getEvent', (ev, slug: string, event: SelectableEvent) => {
     mainWindow.webContents.send('message', '');
-    return getEvent(event);
+    return getEvent(slug, event);
   });
 
   ipcMain.removeHandler('upsertConfiguredPhase');
@@ -1011,9 +1040,13 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('reflow');
   ipcMain.handle(
     'reflow',
-    async (ev, selectedEvent: SelectableEvent): Promise<RendererEvent> => {
+    async (
+      ev,
+      slug: string,
+      selectedEvent: SelectableEvent,
+    ): Promise<RendererEvent> => {
       mainWindow.webContents.send('message', '');
-      const event = await getEvent(selectedEvent);
+      const event = await getEvent(slug, selectedEvent);
       const rawEntrantIds = event.seeds.raw.map((entrant) => entrant.id);
       const idToConfiguredPhase = new Map(
         event.configuredPhases.map((configuredPhase) => [
@@ -1043,7 +1076,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
           .map((seed) => seed.entrant!.id);
         await putDirect(phase.id, entrantIds, prevEntrantIds);
       }
-      return getEvent(selectedEvent);
+      return getEvent(slug, selectedEvent);
     },
   );
 
@@ -1052,11 +1085,12 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     'uploadSeeds',
     async (
       ev,
+      slug: string,
       selectedEvent: SelectableEvent,
       entrants: Entrant[],
     ): Promise<RendererEvent> => {
       mainWindow.webContents.send('message', '');
-      const event = await getEvent(selectedEvent);
+      const event = await getEvent(slug, selectedEvent);
       const expectedEntrantIds = new Set(
         event.seeds.raw.map((entrant) => entrant.id),
       );
@@ -1098,7 +1132,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
           .map((seed) => seed.entrant!.id);
         await putDirect(phase.id, entrantIds, prevEntrantIds);
       }
-      return await getEvent(selectedEvent);
+      return await getEvent(slug, selectedEvent);
     },
   );
 
@@ -1111,12 +1145,11 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         eventId,
         seedNum: i + 1,
       }));
-      const dbPlayers = entrants.flatMap((entrant): DbPlayer[] =>
-        entrant.players.map((player) => ({
+      const dbPlayers = entrants.flatMap((entrant) =>
+        entrant.players.map((player): DbPlayer => ({
           id: player.id,
-          eventId,
-          entrantId: entrant.id,
           gamerTag: player.gamerTag,
+          url: player.url,
         })),
       );
       const dbRankings = entrants.flatMap((entrant) =>
@@ -1141,6 +1174,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
             )`,
           ).run(dbSeed);
         });
+        deleteInsertIntoPlayersToEntrant(eventId, entrants);
         dbPlayers.forEach(replaceIntoPlayers);
         dbRankings.forEach(replaceIntoRankings);
       })();
@@ -1155,18 +1189,46 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       )
       .all({ eventId }) as DbSeed[];
 
+    const entrantIdToPlayerIds = new Map<number, number[]>();
+    (
+      db
+        .prepare('SELECT * FROM playersToEntrant WHERE eventId = @eventId')
+        .all({ eventId }) as DbPlayerToEntrant[]
+    ).forEach((dbPlayerToEntrant) => {
+      const { entrantId } = dbPlayerToEntrant;
+      let playerIds = entrantIdToPlayerIds.get(entrantId);
+      if (!playerIds) {
+        playerIds = [];
+        entrantIdToPlayerIds.set(entrantId, playerIds);
+      }
+      playerIds.push(dbPlayerToEntrant.playerId);
+    });
+
+    // 400 days ago
+    const thresholdS = Math.floor(Date.now() / 1000) - 34560000;
     const entrants = dbSeeds.map((seed): Entrant => {
-      const dbPlayers = db
-        .prepare('SELECT * FROM players WHERE entrantId = @entrantId')
-        .all({ entrantId: seed.entrantId }) as DbPlayer[];
-      const players = dbPlayers.map((dbPlayer) => {
+      const playerIds = entrantIdToPlayerIds.get(seed.entrantId);
+      if (!playerIds) {
+        throw new Error(`no player ids found for entrant ${seed.entrantId}`);
+      }
+      const players = playerIds.map((playerId) => {
+        const dbPlayer = db
+          .prepare('SELECT * FROM players WHERE id = @playerId')
+          .get({ playerId }) as DbPlayer | undefined;
+        if (!dbPlayer) {
+          throw new Error(`player ${playerId} not found`);
+        }
+
         const rankings = db
-          .prepare('SELECT * FROM rankings WHERE playerId = @playerId')
-          .all({ playerId: dbPlayer.id }) as DbRanking[];
+          .prepare(
+            'SELECT * FROM rankings WHERE playerId = @playerId AND publishedAt > @thresholdS',
+          )
+          .all({ playerId, thresholdS }) as DbRanking[];
         return {
           id: dbPlayer.id,
           gamerTag: dbPlayer.gamerTag,
           rankings,
+          url: dbPlayer.url,
         };
       });
       return { id: seed.entrantId, players };
@@ -1174,17 +1236,4 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
 
     return entrants;
   });
-
-  ipcMain.removeHandler('openUserPage');
-  ipcMain.handle(
-    'openUserPage',
-    async (event, playerId: number, gamerTag: string) => {
-      const data = await fetchGqlWithCookie(PLAYER_URL_QUERY, { playerId });
-      const url = data?.player?.url;
-      if (!url) {
-        throw new Error(`No user page for ${gamerTag} (${playerId})`);
-      }
-      return shell.openExternal(url);
-    },
-  );
 }

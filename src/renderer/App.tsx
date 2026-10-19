@@ -262,6 +262,7 @@ function Hello() {
                                     setGettingEvent(true);
                                     setSelectedEvent(
                                       await window.electron.getEvent(
+                                        selectedTournament.slug,
                                         selectedEvent,
                                       ),
                                     );
@@ -302,7 +303,10 @@ function Hello() {
                               try {
                                 setGettingEvent(true);
                                 setSelectedEvent(
-                                  await window.electron.reflow(selectedEvent),
+                                  await window.electron.reflow(
+                                    selectedTournament.slug,
+                                    selectedEvent,
+                                  ),
                                 );
                               } catch (e: unknown) {
                                 if (e instanceof Error) {
@@ -317,6 +321,7 @@ function Hello() {
                                 setGettingEvent(true);
                                 setSelectedEvent(
                                   await window.electron.uploadSeeds(
+                                    selectedTournament.slug,
                                     selectedEvent,
                                     entrants,
                                   ),
@@ -328,9 +333,6 @@ function Hello() {
                               } finally {
                                 setGettingEvent(false);
                               }
-                            }}
-                            showError={(message: string) => {
-                              openError(message);
                             }}
                           />
                         )}
@@ -354,6 +356,7 @@ function Hello() {
                                 setGettingEvent(true);
                                 setSelectedEvent(
                                   await window.electron.getEvent(
+                                    selectedTournament.slug,
                                     newSelectedEvent,
                                   ),
                                 );

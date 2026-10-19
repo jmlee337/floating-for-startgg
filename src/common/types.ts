@@ -1,6 +1,7 @@
 export type SelectableEvent = {
   id: number;
   name: string;
+  videogameId: number;
 };
 
 export enum SeedsStatus {
@@ -32,13 +33,14 @@ export type Ranking = {
   iterationTitle: string;
   publishedAt: number;
   locationType: number;
-  seriesCreatedAt: number;
+  seriesId: number;
 };
 
 export type Player = {
   id: number;
   gamerTag: string;
   rankings: Ranking[];
+  url: string | null;
 };
 
 export type Entrant = {

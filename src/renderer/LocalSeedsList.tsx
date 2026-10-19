@@ -18,33 +18,21 @@ import {
 } from '@mui/material';
 import { DragIndicator, EmojiEvents } from '@mui/icons-material';
 
-function PlayerWithRankings({
-  player,
-  showError,
-}: {
-  player: Player;
-  showError: (message: string) => void;
-}) {
+function PlayerWithRankings({ player }: { player: Player }) {
   return (
     <>
-      <Link
-        style={{ cursor: 'pointer' }}
-        onClick={async () => {
-          try {
-            await window.electron.openUserPage(player.id, player.gamerTag);
-          } catch (e: unknown) {
-            if (e instanceof Error) {
-              showError(e.message);
-            }
-          }
-        }}
-      >
-        {player.gamerTag}
-      </Link>
+      {player.url ? (
+        <Link href={player.url} target="_blank">
+          {player.gamerTag}
+        </Link>
+      ) : (
+        player.gamerTag
+      )}
+
       {player.rankings
         .sort((a, b) => {
           if (a.locationType === b.locationType) {
-            return a.seriesCreatedAt - b.seriesCreatedAt;
+            return a.seriesId - b.seriesId;
           }
           return a.locationType - b.locationType;
         })
@@ -74,7 +62,6 @@ function Sortable({
   index,
   phaseOrder,
   phaseAndFns,
-  showError,
 }: {
   entrant: Entrant;
   index: number;
@@ -85,7 +72,6 @@ function Sortable({
     phaseOrder: number;
     fn: (index: number) => void;
   }[];
-  showError: (message: string) => void;
 }) {
   const { ref, handleRef } = useSortable({
     id: entrant.id,
@@ -122,11 +108,7 @@ function Sortable({
           >
             {index + 1}:&nbsp;
             {entrant.players.map((player) => (
-              <PlayerWithRankings
-                key={player.id}
-                player={player}
-                showError={showError}
-              />
+              <PlayerWithRankings key={player.id} player={player} />
             ))}
           </Typography>
         </ListItemText>
@@ -153,12 +135,10 @@ export default function LocalSeedsList({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
-  showError,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
-  showError: (message: string) => void;
 }) {
   const phaseAndFns = useMemo(
     () =>
@@ -204,7 +184,6 @@ export default function LocalSeedsList({
                   phaseAndFns={phaseAndFns.filter(
                     (phaseAndFn) => phaseAndFn.phaseId !== phase.id,
                   )}
-                  showError={showError}
                 />
               ))}
           </>

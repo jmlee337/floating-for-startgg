@@ -24,25 +24,27 @@ const electronHandler = {
     ipcRenderer.invoke('getTournaments'),
   getTournament: (slug: string): Promise<RendererTournament> =>
     ipcRenderer.invoke('getTournament', slug),
-  getEvent: (event: SelectableEvent): Promise<RendererEvent> =>
-    ipcRenderer.invoke('getEvent', event),
+  getEvent: (slug: string, event: SelectableEvent): Promise<RendererEvent> =>
+    ipcRenderer.invoke('getEvent', slug, event),
   upsertConfiguredPhase: (configuredPhase: ConfiguredPhase): Promise<void> =>
     ipcRenderer.invoke('upsertConfiguredPhase', configuredPhase),
   getConfiguredPhase: (phaseId: number): Promise<ConfiguredPhase> =>
     ipcRenderer.invoke('getConfiguredPhase', phaseId),
-  reflow: (selectableEvent: SelectableEvent): Promise<RendererEvent> =>
-    ipcRenderer.invoke('reflow', selectableEvent),
+  reflow: (
+    slug: string,
+    selectableEvent: SelectableEvent,
+  ): Promise<RendererEvent> =>
+    ipcRenderer.invoke('reflow', slug, selectableEvent),
   uploadSeeds: (
+    slug: string,
     selectableEvent: SelectableEvent,
     entrants: Entrant[],
   ): Promise<RendererEvent> =>
-    ipcRenderer.invoke('uploadSeeds', selectableEvent, entrants),
+    ipcRenderer.invoke('uploadSeeds', slug, selectableEvent, entrants),
   updateLocalSeeds: (eventId: number, entrants: Entrant[]): Promise<void> =>
     ipcRenderer.invoke('updateLocalSeeds', eventId, entrants),
   getLocalSeeds: (eventId: number): Promise<Entrant[]> =>
     ipcRenderer.invoke('getLocalSeeds', eventId),
-  openUserPage: (playerId: number, gamerTag: string): Promise<void> =>
-    ipcRenderer.invoke('openUserPage', playerId, gamerTag),
   onMessage: (callback: (event: IpcRendererEvent, message: string) => void) => {
     ipcRenderer.removeAllListeners('message');
     ipcRenderer.on('message', callback);
