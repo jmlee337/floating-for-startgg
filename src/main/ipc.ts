@@ -688,6 +688,27 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       return getEvent(event);
     }
 
+    // update players
+    const dbPlayers = raw.flatMap((entrant): DbPlayer[] =>
+      entrant.players.map((player) => ({
+        id: player.id,
+        eventId: event.id,
+        entrantId: entrant.id,
+        gamerTag: player.gamerTag,
+      })),
+    );
+    db.transaction(() => {
+      dbPlayers.forEach((dbPlayer) => {
+        db.prepare(
+          `REPLACE INTO players (
+              id, eventId, entrantId, gamerTag
+            ) values (
+              @id, @eventId, @entrantId, @gamerTag
+            )`,
+        ).run(dbPlayer);
+      });
+    })();
+
     return {
       ...event,
       seeds: {
