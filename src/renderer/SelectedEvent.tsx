@@ -69,12 +69,14 @@ function ConfigurePhase({
   eventId,
   phase,
   configuredPhaseInitial,
+  directInPerPoolInitial,
   progressingInPerPool,
   setDirty,
 }: {
   eventId: number;
   phase: Phase;
   configuredPhaseInitial: ConfiguredPhase | undefined;
+  directInPerPoolInitial: number;
   progressingInPerPool: number;
   setDirty: () => void;
 }) {
@@ -82,7 +84,7 @@ function ConfigurePhase({
     configuredPhaseInitial,
   );
   const [directInPerPool, setDirectInPerPool] = useState(
-    configuredPhaseInitial?.directInPerPool ?? 0,
+    configuredPhaseInitial?.directInPerPool ?? directInPerPoolInitial,
   );
 
   return (
@@ -339,6 +341,7 @@ export default function SelectedEvent({
     idToConfiguredPhase,
     idToDirectInPerPool,
     idToProgressingInPerPool,
+    startggHasFloating,
     fullyConfigured,
     configurationMatches,
     properlyFlowed,
@@ -350,10 +353,16 @@ export default function SelectedEvent({
       ]),
     );
 
+    let numDirectPhases = 0;
     const idToDirectInPerPoolInner = new Map<number, number>();
     event.seeds.phases.forEach((phase) => {
-      idToDirectInPerPoolInner.set(phase.id, getDirectInPerPool(phase));
+      const directInPerPool = getDirectInPerPool(phase);
+      idToDirectInPerPoolInner.set(phase.id, directInPerPool);
+      if (directInPerPool !== 0) {
+        numDirectPhases++;
+      }
     });
+    const startggHasFloatingInner = numDirectPhases > 1;
 
     const idToProgressingInPerPoolInner = new Map<number, number>();
     event.seeds.phases.forEach((phase) => {
@@ -409,6 +418,7 @@ export default function SelectedEvent({
       idToConfiguredPhase: idToConfiguredPhaseInner,
       idToDirectInPerPool: idToDirectInPerPoolInner,
       idToProgressingInPerPool: idToProgressingInPerPoolInner,
+      startggHasFloating: startggHasFloatingInner,
       fullyConfigured: fullyConfiguredInner,
       configurationMatches: configurationMatchesInner,
       properlyFlowed: properlyFlowedInner,
@@ -455,11 +465,13 @@ export default function SelectedEvent({
                 setOpen(true);
               }}
             >
-              Configure
+              {startggHasFloating ? 'Confirm configuration' : 'Configure'}
             </Button>
           }
         >
-          Floating not configured
+          {startggHasFloating
+            ? 'start.gg has floating'
+            : 'Floating not configured'}
         </Alert>
       )}
       {fullyConfigured && !configurationMatches && (
@@ -639,6 +651,7 @@ export default function SelectedEvent({
               eventId={event.id}
               phase={phase}
               configuredPhaseInitial={idToConfiguredPhase.get(phase.id)}
+              directInPerPoolInitial={idToDirectInPerPool.get(phase.id)!}
               progressingInPerPool={idToProgressingInPerPool.get(phase.id)!}
               setDirty={() => {
                 setDirty(true);
@@ -646,17 +659,19 @@ export default function SelectedEvent({
             />
           ))}
         </DialogContent>
-        <DialogActions>
-          <Button
-            variant="contained"
-            onClick={() => {
-              setOpen(false);
-              reflow();
-            }}
-          >
-            Force Reflow
-          </Button>
-        </DialogActions>
+        {fullyConfigured && (
+          <DialogActions>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setOpen(false);
+                reflow();
+              }}
+            >
+              Force Reflow
+            </Button>
+          </DialogActions>
+        )}
       </Dialog>
       {editing ? (
         <LocalEvent
