@@ -24,9 +24,21 @@ export type RendererTournament = SelectableTournament & {
   events: SelectableEvent[];
 };
 
+export type Ranking = {
+  id: number;
+  rank: number;
+  seriesName: string;
+  iconUrl: string | null;
+  iterationTitle: string;
+  publishedAt: number;
+  locationType: number;
+  seriesCreatedAt: number;
+};
+
 export type Player = {
   id: number;
   gamerTag: string;
+  rankings: Ranking[];
 };
 
 export type Entrant = {

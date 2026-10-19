@@ -1,4 +1,4 @@
-import { Entrant, Phase } from '../common/types';
+import { Entrant, Phase, Player } from '../common/types';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { move } from '@dnd-kit/helpers';
@@ -12,9 +12,42 @@ import {
   ListItemText,
   ListSubheader,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
-import { DragIndicator } from '@mui/icons-material';
+import { DragIndicator, EmojiEvents } from '@mui/icons-material';
+
+function PlayerWithRankings({ player }: { player: Player }) {
+  return (
+    <>
+      {player.gamerTag}
+      {player.rankings
+        .sort((a, b) => {
+          if (a.locationType === b.locationType) {
+            return a.seriesCreatedAt - b.seriesCreatedAt;
+          }
+          return a.locationType - b.locationType;
+        })
+        .map((ranking) => (
+          <Stack
+            key={ranking.id}
+            direction="row"
+            style={{ alignItems: 'center', marginLeft: '8px', gap: '4px' }}
+          >
+            <Tooltip title={`${ranking.seriesName}: ${ranking.iterationTitle}`}>
+              {ranking.iconUrl ? (
+                // eslint-disable-next-line jsx-a11y/alt-text
+                <img src={ranking.iconUrl} height="20px" width="20px" />
+              ) : (
+                <EmojiEvents fontSize="small" />
+              )}
+            </Tooltip>
+            {ranking.rank}
+          </Stack>
+        ))}
+    </>
+  );
+}
 
 function Sortable({
   entrant,
@@ -61,9 +94,14 @@ function Sortable({
           </ListItemIcon>
         </ListItemButton>
         <ListItemText disableTypography style={{ margin: 0 }}>
-          <Typography variant="caption">
+          <Typography
+            variant="caption"
+            style={{ display: 'flex', flexDirection: 'row' }}
+          >
             {index + 1}:{' '}
-            {entrant.players.map((player) => player.gamerTag).join(' / ')}
+            {entrant.players.map((player) => (
+              <PlayerWithRankings key={player.id} player={player} />
+            ))}
           </Typography>
         </ListItemText>
       </Stack>
