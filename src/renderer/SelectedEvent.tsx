@@ -279,9 +279,9 @@ function LocalEvent({
         break;
       }
 
-      const numEntrants = phase.pools
-        .map((pool) => pool.seeds.filter((seed) => seed.entrant).length)
-        .reduce((prev, curr) => prev + curr);
+      const numEntrants = phase.pools.flatMap((pool) =>
+        pool.seeds.filter((seed) => seed.entrant),
+      ).length;
       const seedNumToEntrant = new Map(
         remainingEntrants
           .splice(0, numEntrants)
@@ -293,10 +293,19 @@ function LocalEvent({
         pools: phase.pools.map((pool) => ({
           ...pool,
           seeds: pool.seeds.map((seed) => {
+            if (!seed.entrant) {
+              return seed;
+            }
+
             const entrant = seedNumToEntrant.get(seed.seedNum);
+            if (!entrant) {
+              throw new Error(
+                `entrant not found for seedNum ${seed.seedNum} in phase ${phase.id}`,
+              );
+            }
             return {
               ...seed,
-              entrant: entrant ?? { id: seed.seedNum, players: [] },
+              entrant,
             };
           }),
         })),
@@ -430,7 +439,6 @@ export default function SelectedEvent({
     <Stack
       direction="column"
       style={{
-        alignItems: 'start',
         paddingTop: '8px',
         paddingLeft: '8px',
         paddingRight: '8px',
