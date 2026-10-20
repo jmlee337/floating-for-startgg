@@ -163,10 +163,12 @@ export default function LocalSeedsList({
         setMutableLocalSeeds((prevEntrants) => move(prevEntrants, event));
       }}
     >
-      <List>
+      <List disablePadding>
         {phases.map((phase) => (
           <>
-            <ListSubheader>{phase.name}</ListSubheader>
+            <ListSubheader disableGutters key={phase.id}>
+              {phase.name}
+            </ListSubheader>
             {mutableLocalSeeds
               .slice(
                 phase.seedNumOffset,

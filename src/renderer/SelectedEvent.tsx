@@ -212,7 +212,11 @@ function StartggEvent({ phases }: { phases: Phase[] }) {
     <>
       {phases.map((phase) => (
         <Stack key={phase.id} direction="row" style={{ gap: '8px' }}>
-          <Typography variant="body2" style={{ flexShrink: 0 }}>
+          <Typography
+            variant="body2"
+            color="textSecondary"
+            style={{ flexShrink: 0 }}
+          >
             {phase.name}
           </Typography>
           <Stack
@@ -228,7 +232,9 @@ function StartggEvent({ phases }: { phases: Phase[] }) {
                 direction="column"
                 style={{ width: '130px' }}
               >
-                <Typography variant="body2">{pool.name}</Typography>
+                <Typography variant="body2" color="textSecondary">
+                  {pool.name}
+                </Typography>
                 {pool.seeds.map((seed) => (
                   <Typography
                     key={seed.id}
@@ -273,9 +279,9 @@ function LocalEvent({
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
 }) {
-  const actualPhases = useMemo(() => {
+  const { actualPhases, poolIdToSeeds } = useMemo(() => {
     const remainingEntrants = new Array(...mutableLocalSeeds);
-    const ret: Phase[] = [];
+    const newActualPhases: Phase[] = [];
     for (const phase of phases) {
       if (remainingEntrants.length === 0) {
         break;
@@ -290,7 +296,7 @@ function LocalEvent({
           .map((entrant, i) => [i + 1, entrant]),
       );
 
-      ret.push({
+      newActualPhases.push({
         ...phase,
         pools: phase.pools.map((pool) => ({
           ...pool,
@@ -313,12 +319,127 @@ function LocalEvent({
         })),
       });
     }
-    return ret;
+    const newPoolIdToSeeds = new Map<number, Seed[]>();
+    newActualPhases.forEach((phase) => {
+      phase.pools.forEach((pool) => {
+        newPoolIdToSeeds.set(pool.id, pool.seeds);
+      });
+    });
+    return { actualPhases: newActualPhases, poolIdToSeeds: newPoolIdToSeeds };
   }, [phases, mutableLocalSeeds]);
 
+  const [selectedSeedNum, setSelectedSeedNum] = useState(0);
   return (
     <>
-      <StartggEvent phases={actualPhases} />
+      {actualPhases.map((phase) => (
+        <Stack key={phase.id} direction="row" style={{ gap: '8px' }}>
+          <Typography
+            variant="body2"
+            color="textSecondary"
+            style={{ flexShrink: 0 }}
+          >
+            {phase.name}
+          </Typography>
+          <Stack
+            direction="row"
+            style={{
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {phase.pools.map((pool) => (
+              <Stack
+                key={pool.id}
+                direction="column"
+                style={{ width: '130px' }}
+              >
+                <Typography variant="body2" color="textSecondary">
+                  {pool.name}
+                </Typography>
+                {pool.seeds.map((seed) => (
+                  <>
+                    {seed.entrant && (
+                      <Typography
+                        key={seed.id}
+                        variant="caption"
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                        }}
+                        sx={
+                          selectedSeedNum === phase.seedNumOffset + seed.seedNum
+                            ? {
+                                backgroundColor: (theme) =>
+                                  theme.palette.secondary.main,
+                                color: (theme) =>
+                                  theme.palette.secondary.contrastText,
+                              }
+                            : undefined
+                        }
+                        onClick={() => {
+                          if (!selectedSeedNum) {
+                            setSelectedSeedNum(
+                              phase.seedNumOffset + seed.seedNum,
+                            );
+                            return;
+                          }
+                          if (selectedSeedNum === seed.seedNum) {
+                            setSelectedSeedNum(0);
+                            return;
+                          }
+                          const index1 = selectedSeedNum - 1;
+                          const index2 = phase.seedNumOffset + seed.seedNum - 1;
+                          setMutableLocalSeeds((oldMutableLocalSeeds) => {
+                            const arr = [...oldMutableLocalSeeds];
+                            [arr[index1], arr[index2]] = [
+                              arr[index2],
+                              arr[index1],
+                            ];
+                            return arr;
+                          });
+                          setSelectedSeedNum(0);
+                        }}
+                      >
+                        {seed.seedNum}:{' '}
+                        {seed.entrant.players
+                          .map((player) => player.gamerTag)
+                          .join(' / ')}
+                      </Typography>
+                    )}
+                    {seed.origin && (
+                      <Typography
+                        key={seed.id}
+                        variant="caption"
+                        color="warning"
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontStyle: 'italic',
+                          cursor: 'not-allowed',
+                        }}
+                      >
+                        {seed.seedNum}:{' '}
+                        {poolIdToSeeds
+                          .get(seed.origin.poolId)
+                          ?.[seed.origin.placement - 1]?.entrant?.players.map(
+                            (player) => player.gamerTag,
+                          )
+                          .join(' / ')}
+                      </Typography>
+                    )}
+                  </>
+                ))}
+              </Stack>
+            ))}
+          </Stack>
+        </Stack>
+      ))}
+      <Typography variant="body1" style={{ margin: '4px 0 -4px' }}>
+        Drag to re-order!
+      </Typography>
       <LocalSeedsList
         phases={phases}
         mutableLocalSeeds={mutableLocalSeeds}
@@ -520,12 +641,11 @@ export default function SelectedEvent({
             alignItems: 'center',
             boxSizing: 'border-box',
             justifyContent: 'space-between',
-            paddingLeft: '36px',
             width: '100%',
           }}
         >
           <Typography variant="body1" style={{ margin: '4px 0' }}>
-            {editing ? 'Editing locally:' : 'Viewing start.gg:'}
+            {editing ? 'Click to swap!' : 'Viewing start.gg:'}
           </Typography>
           {editing ? (
             <Stack direction="row" style={{ gap: '8px' }}>
