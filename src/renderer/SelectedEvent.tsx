@@ -274,17 +274,13 @@ function LocalEvent({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
-  raw,
+  idToRawEntrant,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
-  raw: Entrant[];
+  idToRawEntrant: Map<number, Entrant>;
 }) {
-  const idToRawEntrant = useMemo(
-    () => new Map(raw.map((entrant) => [entrant.id, entrant])),
-    [raw],
-  );
   const { actualPhases, poolIdToSeeds } = useMemo(() => {
     const remainingEntrants = new Array(...mutableLocalSeeds);
     const newActualPhases: Phase[] = [];
@@ -583,6 +579,11 @@ export default function SelectedEvent({
     };
   }, [event]);
 
+  const idToRawEntrant = useMemo(
+    () => new Map(event.seeds.raw.map((entrant) => [entrant.id, entrant])),
+    [event.seeds.raw],
+  );
+
   const [open, setOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -592,6 +593,12 @@ export default function SelectedEvent({
     () =>
       dbLocalSeeds.every((entrant, i) => entrant.id === event.seeds.raw[i].id),
     [dbLocalSeeds, event.seeds.raw],
+  );
+  const dbSeedsEntrantMismatch = useMemo(
+    () =>
+      dbLocalSeeds.length !== idToRawEntrant.size ||
+      dbLocalSeeds.some((entrant) => !idToRawEntrant.has(entrant.id)),
+    [dbLocalSeeds, idToRawEntrant],
   );
 
   const [mutableLocalSeeds, setMutableLocalSeeds] = useState<Entrant[]>([]);
@@ -705,7 +712,7 @@ export default function SelectedEvent({
                 Download
               </Button>
               <Button
-                disabled={dbSeedsUnchanged}
+                disabled={dbSeedsUnchanged || dbSeedsEntrantMismatch}
                 size="small"
                 variant="contained"
                 endIcon={<CloudUpload />}
@@ -837,7 +844,7 @@ export default function SelectedEvent({
           )}
           mutableLocalSeeds={mutableLocalSeeds}
           setMutableLocalSeeds={setMutableLocalSeeds}
-          raw={event.seeds.raw}
+          idToRawEntrant={idToRawEntrant}
         />
       ) : (
         <StartggEvent
