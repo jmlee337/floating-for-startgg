@@ -274,11 +274,17 @@ function LocalEvent({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
+  raw,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
+  raw: Entrant[];
 }) {
+  const idToRawEntrant = useMemo(
+    () => new Map(raw.map((entrant) => [entrant.id, entrant])),
+    [raw],
+  );
   const { actualPhases, poolIdToSeeds } = useMemo(() => {
     const remainingEntrants = new Array(...mutableLocalSeeds);
     const newActualPhases: Phase[] = [];
@@ -368,16 +374,46 @@ function LocalEvent({
                           whiteSpace: 'nowrap',
                           cursor: 'pointer',
                         }}
-                        sx={
-                          selectedSeedNum === phase.seedNumOffset + seed.seedNum
-                            ? {
-                                backgroundColor: (theme) =>
-                                  theme.palette.secondary.main,
-                                color: (theme) =>
-                                  theme.palette.secondary.contrastText,
-                              }
-                            : undefined
-                        }
+                        sx={{
+                          backgroundColor: (theme) => {
+                            if (
+                              selectedSeedNum ===
+                                phase.seedNumOffset + seed.seedNum &&
+                              !idToRawEntrant.has(seed.entrant!.id)
+                            ) {
+                              return theme.palette.secondary.light;
+                            }
+                            if (
+                              selectedSeedNum ===
+                              phase.seedNumOffset + seed.seedNum
+                            ) {
+                              return theme.palette.primary.light;
+                            }
+                            if (!idToRawEntrant.has(seed.entrant!.id)) {
+                              return theme.palette.error.light;
+                            }
+                            return 'initial';
+                          },
+                          color: (theme) => {
+                            if (
+                              selectedSeedNum ===
+                                phase.seedNumOffset + seed.seedNum &&
+                              !idToRawEntrant.has(seed.entrant!.id)
+                            ) {
+                              return theme.palette.secondary.contrastText;
+                            }
+                            if (
+                              selectedSeedNum ===
+                              phase.seedNumOffset + seed.seedNum
+                            ) {
+                              return theme.palette.primary.contrastText;
+                            }
+                            if (!idToRawEntrant.has(seed.entrant!.id)) {
+                              return theme.palette.error.contrastText;
+                            }
+                            return 'initial';
+                          },
+                        }}
                         onClick={() => {
                           if (!selectedSeedNum) {
                             setSelectedSeedNum(
@@ -444,6 +480,7 @@ function LocalEvent({
         phases={phases}
         mutableLocalSeeds={mutableLocalSeeds}
         setMutableLocalSeeds={setMutableLocalSeeds}
+        idToRawEntrant={idToRawEntrant}
       />
     </>
   );
@@ -800,6 +837,7 @@ export default function SelectedEvent({
           )}
           mutableLocalSeeds={mutableLocalSeeds}
           setMutableLocalSeeds={setMutableLocalSeeds}
+          raw={event.seeds.raw}
         />
       ) : (
         <StartggEvent

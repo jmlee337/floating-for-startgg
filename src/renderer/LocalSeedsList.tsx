@@ -18,11 +18,30 @@ import {
 } from '@mui/material';
 import { DragIndicator, EmojiEvents } from '@mui/icons-material';
 
-function PlayerWithRankings({ player }: { player: Player }) {
+function PlayerWithRankings({
+  player,
+  missing,
+}: {
+  player: Player;
+  missing: boolean;
+}) {
   return (
     <>
       {player.url ? (
-        <Link href={player.url} target="_blank">
+        <Link
+          href={player.url}
+          target="_blank"
+          sx={{
+            color: (theme) =>
+              missing
+                ? theme.palette.error.contrastText
+                : theme.palette.primary.main,
+            textDecorationColor: (theme) =>
+              missing
+                ? `alpha(from ${theme.palette.error.contrastText} / 0.4)`
+                : 'var(--Link-underlineColor)',
+          }}
+        >
           {player.gamerTag}
         </Link>
       ) : (
@@ -62,6 +81,7 @@ function Sortable({
   index,
   phaseOrder,
   phaseAndFns,
+  idToRawEntrant,
 }: {
   entrant: Entrant;
   index: number;
@@ -72,6 +92,7 @@ function Sortable({
     phaseOrder: number;
     fn: (index: number) => void;
   }[];
+  idToRawEntrant: Map<number, Entrant>;
 }) {
   const { ref, handleRef } = useSortable({
     id: entrant.id,
@@ -83,13 +104,17 @@ function Sortable({
       disablePadding
       ref={ref}
       style={{ justifyContent: 'space-between' }}
-      sx={
-        index % 2 === 1
-          ? {
-              backgroundColor: (theme) => theme.palette.action.hover,
-            }
-          : undefined
-      }
+      sx={{
+        backgroundColor: (theme) => {
+          if (!idToRawEntrant.has(entrant.id)) {
+            return theme.palette.error.light;
+          }
+          if (index % 2 === 1) {
+            return theme.palette.action.hover;
+          }
+          return 'initial';
+        },
+      }}
     >
       <Stack direction="row" style={{ gap: '8px', alignItems: 'center' }}>
         <ListItemButton
@@ -104,11 +129,24 @@ function Sortable({
         <ListItemText disableTypography style={{ margin: 0 }}>
           <Typography
             variant="caption"
-            style={{ display: 'flex', flexDirection: 'row' }}
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+            }}
+            sx={{
+              color: (theme) =>
+                idToRawEntrant.has(entrant.id)
+                  ? 'initial'
+                  : theme.palette.error.contrastText,
+            }}
           >
             {index + 1}:&nbsp;
             {entrant.players.map((player) => (
-              <PlayerWithRankings key={player.id} player={player} />
+              <PlayerWithRankings
+                key={player.id}
+                player={player}
+                missing={!idToRawEntrant.has(entrant.id)}
+              />
             ))}
           </Typography>
         </ListItemText>
@@ -118,6 +156,12 @@ function Sortable({
           <Button
             key={phaseAndFn.phaseId}
             size="small"
+            sx={{
+              color: (theme) =>
+                idToRawEntrant.has(entrant.id)
+                  ? theme.palette.primary.main
+                  : theme.palette.error.contrastText,
+            }}
             onClick={() => {
               phaseAndFn.fn(index);
             }}
@@ -135,10 +179,12 @@ export default function LocalSeedsList({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
+  idToRawEntrant,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
+  idToRawEntrant: Map<number, Entrant>;
 }) {
   const phaseAndFns = useMemo(
     () =>
@@ -186,6 +232,7 @@ export default function LocalSeedsList({
                   phaseAndFns={phaseAndFns.filter(
                     (phaseAndFn) => phaseAndFn.phaseId !== phase.id,
                   )}
+                  idToRawEntrant={idToRawEntrant}
                 />
               ))}
           </>
