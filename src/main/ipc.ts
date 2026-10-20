@@ -130,6 +130,11 @@ const TOURNAMENT_PARTICIPANTS_QUERY = `
   }
 `;
 
+function getThresholdS() {
+  // 400 days ago
+  return Math.floor(Date.now() / 1000) - 34560000;
+}
+
 export default async function setupIPCs(mainWindow: BrowserWindow) {
   const store = new Store<{
     base64EncryptedPassword: string;
@@ -205,9 +210,10 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     eventId: number,
     entrants: Entrant[],
   ) => {
-    db.prepare('DELETE FROM playersToEntrant WHERE eventId = @eventId').run({
-      eventId,
-    });
+    const entrantIds = entrants.map((entrant) => entrant.id);
+    db.prepare(
+      `DELETE FROM playersToEntrant WHERE entrantId IN (${entrantIds.join(',')})`,
+    ).run();
     entrants.forEach((entrant) => {
       entrant.players.forEach((player) => {
         db.prepare(
@@ -233,9 +239,19 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       )`,
     ).run(dbPlayer);
   };
-  const replaceIntoRankings = (dbRanking: DbRanking) => {
-    db.prepare(
-      `REPLACE INTO rankings (
+  const deleteInsertIntoRankings = (player: Player, thresholdS: number) => {
+    db.prepare('DELETE FROM rankings WHERE playerId = @playerId').run({
+      playerId: player.id,
+    });
+    player.rankings
+      .filter((ranking) => ranking.publishedAt > thresholdS)
+      .forEach((ranking) => {
+        const dbRanking: DbRanking = {
+          ...ranking,
+          playerId: player.id,
+        };
+        db.prepare(
+          `REPLACE INTO rankings (
         id,
         playerId,
         rank,
@@ -256,7 +272,17 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         @locationType,
         @seriesId
       )`,
-    ).run(dbRanking);
+        ).run(dbRanking);
+      });
+  };
+  const updateForEntrants = (eventId: number, entrants: Entrant[]) => {
+    deleteInsertIntoPlayersToEntrant(eventId, entrants);
+    entrants.forEach((entrant) => {
+      entrant.players.forEach((player) => {
+        replaceIntoPlayers(player);
+        deleteInsertIntoRankings(player, getThresholdS());
+      });
+    });
   };
 
   ipcMain.removeHandler('getAppVersion');
@@ -868,17 +894,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
 
     // update players
     db.transaction(() => {
-      deleteInsertIntoPlayersToEntrant(event.id, raw);
-      raw.forEach((entrant) => {
-        entrant.players.forEach((player) => {
-          replaceIntoPlayers(player);
-          const dbRankings: DbRanking[] = player.rankings.map((ranking) => ({
-            ...ranking,
-            playerId: player.id,
-          }));
-          dbRankings.forEach(replaceIntoRankings);
-        });
-      });
+      updateForEntrants(event.id, raw);
     })();
 
     return {
@@ -1145,21 +1161,6 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         eventId,
         seedNum: i + 1,
       }));
-      const dbPlayers = entrants.flatMap((entrant) =>
-        entrant.players.map((player): DbPlayer => ({
-          id: player.id,
-          gamerTag: player.gamerTag,
-          url: player.url,
-        })),
-      );
-      const dbRankings = entrants.flatMap((entrant) =>
-        entrant.players.flatMap((player) =>
-          player.rankings.map((ranking): DbRanking => ({
-            ...ranking,
-            playerId: player.id,
-          })),
-        ),
-      );
 
       db.transaction(() => {
         db.prepare('DELETE FROM seeds WHERE eventId = @eventId').run({
@@ -1174,9 +1175,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
             )`,
           ).run(dbSeed);
         });
-        deleteInsertIntoPlayersToEntrant(eventId, entrants);
-        dbPlayers.forEach(replaceIntoPlayers);
-        dbRankings.forEach(replaceIntoRankings);
+        updateForEntrants(eventId, entrants);
       })();
     },
   );
@@ -1204,8 +1203,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       playerIds.push(dbPlayerToEntrant.playerId);
     });
 
-    // 400 days ago
-    const thresholdS = Math.floor(Date.now() / 1000) - 34560000;
+    const thresholdS = getThresholdS();
     const entrants = dbSeeds.map((seed): Entrant => {
       const playerIds = entrantIdToPlayerIds.get(seed.entrantId);
       if (!playerIds) {
