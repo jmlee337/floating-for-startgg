@@ -1,67 +1,191 @@
 import { Dispatch, SetStateAction, useMemo, useState } from 'react';
-import { Entrant, Phase, Seed } from '../common/types';
+import { Entrant, Origin, Phase, Seed, SyncState } from '../common/types';
 import { Stack, Typography } from '@mui/material';
 import LocalSeedsList from './LocalSeedsList';
+
+function RenderSeed({
+  seedNumOffset,
+  seedNum,
+  entrant,
+  origin,
+  poolIdToSeeds,
+  selectedSeedNum,
+  setSelectedSeedNum,
+  setMutableLocalSeeds,
+}: {
+  seedNumOffset: number;
+  seedNum: number;
+  entrant: Entrant | undefined;
+  origin: Origin | undefined;
+  selectedSeedNum: number;
+  poolIdToSeeds: Map<number, Seed[]>;
+  setSelectedSeedNum: (selectedSeedNum: number) => void;
+  setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
+}) {
+  const overallSeedNum = seedNumOffset + seedNum;
+  return (
+    <>
+      {entrant && (
+        <Typography
+          variant="caption"
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+          }}
+          sx={{
+            backgroundColor: (theme) => {
+              if (
+                selectedSeedNum === overallSeedNum &&
+                entrant.syncState === SyncState.LOCAL_ONLY
+              ) {
+                return theme.palette.secondary.light;
+              }
+              if (selectedSeedNum === overallSeedNum) {
+                return theme.palette.primary.light;
+              }
+              if (entrant.syncState === SyncState.LOCAL_ONLY) {
+                return theme.palette.error.light;
+              }
+              if (entrant.syncState === SyncState.STARTGG_ONLY) {
+                return theme.palette.success.light;
+              }
+              return 'initial';
+            },
+            color: (theme) => {
+              if (
+                selectedSeedNum === overallSeedNum &&
+                entrant.syncState === SyncState.LOCAL_ONLY
+              ) {
+                return theme.palette.secondary.contrastText;
+              }
+              if (selectedSeedNum === overallSeedNum) {
+                return theme.palette.primary.contrastText;
+              }
+              if (entrant.syncState === SyncState.LOCAL_ONLY) {
+                return theme.palette.error.contrastText;
+              }
+              if (entrant.syncState === SyncState.STARTGG_ONLY) {
+                return theme.palette.success.contrastText;
+              }
+              return 'initial';
+            },
+          }}
+          onClick={() => {
+            if (!selectedSeedNum) {
+              setSelectedSeedNum(overallSeedNum);
+              return;
+            }
+            if (selectedSeedNum === overallSeedNum) {
+              setSelectedSeedNum(0);
+              return;
+            }
+            const index1 = selectedSeedNum - 1;
+            const index2 = overallSeedNum - 1;
+            setMutableLocalSeeds((oldMutableLocalSeeds) => {
+              const arr = [...oldMutableLocalSeeds];
+              [arr[index1], arr[index2]] = [arr[index2], arr[index1]];
+              return arr;
+            });
+            setSelectedSeedNum(0);
+          }}
+        >
+          {seedNum}:{' '}
+          {entrant.players.map((player) => player.gamerTag).join(' / ')}
+        </Typography>
+      )}
+      {origin && (
+        <Typography
+          variant="caption"
+          color="warning"
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontStyle: 'italic',
+            cursor: 'not-allowed',
+          }}
+        >
+          {seedNum}:{' '}
+          {poolIdToSeeds
+            .get(origin.poolId)
+            ?.[origin.placement - 1]?.entrant?.players.map(
+              (player) => player.gamerTag,
+            )
+            .join(' / ')}
+        </Typography>
+      )}
+    </>
+  );
+}
 
 export default function LocalEvent({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
-  idToRawEntrant,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
-  idToRawEntrant: Map<number, Entrant>;
 }) {
-  const { actualPhases, poolIdToSeeds } = useMemo(() => {
-    const remainingEntrants = new Array(...mutableLocalSeeds);
-    const newActualPhases: Phase[] = [];
-    for (const phase of phases) {
-      if (remainingEntrants.length === 0) {
-        break;
+  const { actualPhases, poolIdToSeeds, startggOnlyEntrantsStartI } =
+    useMemo(() => {
+      const remainingEntrants = new Array(...mutableLocalSeeds);
+      const newActualPhases: Phase[] = [];
+      for (const phase of phases) {
+        if (remainingEntrants.length === 0) {
+          break;
+        }
+
+        const numEntrants = phase.pools.flatMap((pool) =>
+          pool.seeds.filter((seed) => seed.entrant),
+        ).length;
+        const seedNumToEntrant = new Map(
+          remainingEntrants
+            .splice(0, numEntrants)
+            .map((entrant, i) => [i + 1, entrant]),
+        );
+
+        newActualPhases.push({
+          ...phase,
+          pools: phase.pools.map((pool) => ({
+            ...pool,
+            seeds: pool.seeds.map((seed) => {
+              if (!seed.entrant) {
+                return seed;
+              }
+
+              const entrant = seedNumToEntrant.get(seed.seedNum);
+              if (!entrant) {
+                throw new Error(
+                  `entrant not found for seedNum ${seed.seedNum} in phase ${phase.id}`,
+                );
+              }
+              return {
+                ...seed,
+                entrant,
+              };
+            }),
+          })),
+        });
       }
-
-      const numEntrants = phase.pools.flatMap((pool) =>
-        pool.seeds.filter((seed) => seed.entrant),
-      ).length;
-      const seedNumToEntrant = new Map(
-        remainingEntrants
-          .splice(0, numEntrants)
-          .map((entrant, i) => [i + 1, entrant]),
-      );
-
-      newActualPhases.push({
-        ...phase,
-        pools: phase.pools.map((pool) => ({
-          ...pool,
-          seeds: pool.seeds.map((seed) => {
-            if (!seed.entrant) {
-              return seed;
-            }
-
-            const entrant = seedNumToEntrant.get(seed.seedNum);
-            if (!entrant) {
-              throw new Error(
-                `entrant not found for seedNum ${seed.seedNum} in phase ${phase.id}`,
-              );
-            }
-            return {
-              ...seed,
-              entrant,
-            };
-          }),
-        })),
+      const newPoolIdToSeeds = new Map<number, Seed[]>();
+      newActualPhases.forEach((phase) => {
+        phase.pools.forEach((pool) => {
+          newPoolIdToSeeds.set(pool.id, pool.seeds);
+        });
       });
-    }
-    const newPoolIdToSeeds = new Map<number, Seed[]>();
-    newActualPhases.forEach((phase) => {
-      phase.pools.forEach((pool) => {
-        newPoolIdToSeeds.set(pool.id, pool.seeds);
-      });
-    });
-    return { actualPhases: newActualPhases, poolIdToSeeds: newPoolIdToSeeds };
-  }, [phases, mutableLocalSeeds]);
+
+      const lastActualPhase = newActualPhases[newActualPhases.length - 1];
+      return {
+        actualPhases: newActualPhases,
+        poolIdToSeeds: newPoolIdToSeeds,
+        startggOnlyEntrantsStartI:
+          lastActualPhase.seedNumOffset +
+          lastActualPhase.pools.flatMap((pool) => pool.seeds).length,
+      };
+    }, [phases, mutableLocalSeeds]);
 
   const [selectedSeedNum, setSelectedSeedNum] = useState(0);
   return (
@@ -92,116 +216,58 @@ export default function LocalEvent({
                   {pool.name}
                 </Typography>
                 {pool.seeds.map((seed) => (
-                  <>
-                    {seed.entrant && (
-                      <Typography
-                        key={seed.id}
-                        variant="caption"
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer',
-                        }}
-                        sx={{
-                          backgroundColor: (theme) => {
-                            if (
-                              selectedSeedNum ===
-                                phase.seedNumOffset + seed.seedNum &&
-                              !idToRawEntrant.has(seed.entrant!.id)
-                            ) {
-                              return theme.palette.secondary.light;
-                            }
-                            if (
-                              selectedSeedNum ===
-                              phase.seedNumOffset + seed.seedNum
-                            ) {
-                              return theme.palette.primary.light;
-                            }
-                            if (!idToRawEntrant.has(seed.entrant!.id)) {
-                              return theme.palette.error.light;
-                            }
-                            return 'initial';
-                          },
-                          color: (theme) => {
-                            if (
-                              selectedSeedNum ===
-                                phase.seedNumOffset + seed.seedNum &&
-                              !idToRawEntrant.has(seed.entrant!.id)
-                            ) {
-                              return theme.palette.secondary.contrastText;
-                            }
-                            if (
-                              selectedSeedNum ===
-                              phase.seedNumOffset + seed.seedNum
-                            ) {
-                              return theme.palette.primary.contrastText;
-                            }
-                            if (!idToRawEntrant.has(seed.entrant!.id)) {
-                              return theme.palette.error.contrastText;
-                            }
-                            return 'initial';
-                          },
-                        }}
-                        onClick={() => {
-                          if (!selectedSeedNum) {
-                            setSelectedSeedNum(
-                              phase.seedNumOffset + seed.seedNum,
-                            );
-                            return;
-                          }
-                          if (selectedSeedNum === seed.seedNum) {
-                            setSelectedSeedNum(0);
-                            return;
-                          }
-                          const index1 = selectedSeedNum - 1;
-                          const index2 = phase.seedNumOffset + seed.seedNum - 1;
-                          setMutableLocalSeeds((oldMutableLocalSeeds) => {
-                            const arr = [...oldMutableLocalSeeds];
-                            [arr[index1], arr[index2]] = [
-                              arr[index2],
-                              arr[index1],
-                            ];
-                            return arr;
-                          });
-                          setSelectedSeedNum(0);
-                        }}
-                      >
-                        {seed.seedNum}:{' '}
-                        {seed.entrant.players
-                          .map((player) => player.gamerTag)
-                          .join(' / ')}
-                      </Typography>
-                    )}
-                    {seed.origin && (
-                      <Typography
-                        key={seed.id}
-                        variant="caption"
-                        color="warning"
-                        style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontStyle: 'italic',
-                          cursor: 'not-allowed',
-                        }}
-                      >
-                        {seed.seedNum}:{' '}
-                        {poolIdToSeeds
-                          .get(seed.origin.poolId)
-                          ?.[seed.origin.placement - 1]?.entrant?.players.map(
-                            (player) => player.gamerTag,
-                          )
-                          .join(' / ')}
-                      </Typography>
-                    )}
-                  </>
+                  <RenderSeed
+                    key={seed.id}
+                    entrant={seed.entrant}
+                    origin={seed.origin}
+                    seedNumOffset={phase.seedNumOffset}
+                    seedNum={seed.seedNum}
+                    poolIdToSeeds={poolIdToSeeds}
+                    selectedSeedNum={selectedSeedNum}
+                    setSelectedSeedNum={setSelectedSeedNum}
+                    setMutableLocalSeeds={setMutableLocalSeeds}
+                  />
                 ))}
               </Stack>
             ))}
           </Stack>
         </Stack>
       ))}
+      {startggOnlyEntrantsStartI < mutableLocalSeeds.length && (
+        <Stack direction="column">
+          <Typography
+            variant="body2"
+            color="textSecondary"
+            style={{ flexShrink: 0 }}
+          >
+            To Remove
+          </Typography>
+          <Stack
+            direction="row"
+            style={{
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {mutableLocalSeeds
+              .slice(startggOnlyEntrantsStartI)
+              .map((entrant, i) => (
+                <Stack key={entrant.id} style={{ width: '130px' }}>
+                  <RenderSeed
+                    entrant={entrant}
+                    origin={undefined}
+                    seedNumOffset={startggOnlyEntrantsStartI}
+                    seedNum={i + 1}
+                    poolIdToSeeds={poolIdToSeeds}
+                    selectedSeedNum={selectedSeedNum}
+                    setSelectedSeedNum={setSelectedSeedNum}
+                    setMutableLocalSeeds={setMutableLocalSeeds}
+                  />
+                </Stack>
+              ))}
+          </Stack>
+        </Stack>
+      )}
       <Typography variant="body1" style={{ margin: '4px 0 -4px' }}>
         Drag to re-order!
       </Typography>
@@ -209,7 +275,7 @@ export default function LocalEvent({
         phases={phases}
         mutableLocalSeeds={mutableLocalSeeds}
         setMutableLocalSeeds={setMutableLocalSeeds}
-        idToRawEntrant={idToRawEntrant}
+        startggOnlyEntrantsStartI={startggOnlyEntrantsStartI}
       />
     </>
   );

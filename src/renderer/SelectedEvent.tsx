@@ -8,7 +8,13 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { Entrant, Phase, RendererEvent, SeedsStatus } from '../common/types';
+import {
+  Entrant,
+  Phase,
+  RendererEvent,
+  SeedsStatus,
+  SyncState,
+} from '../common/types';
 import { useMemo, useState } from 'react';
 import { CloudDownload, CloudUpload, Restore, Save } from '@mui/icons-material';
 import LocalEvent from './LocalEvent';
@@ -150,11 +156,6 @@ export default function SelectedEvent({
     };
   }, [event]);
 
-  const idToRawEntrant = useMemo(
-    () => new Map(event.seeds.raw.map((entrant) => [entrant.id, entrant])),
-    [event.seeds.raw],
-  );
-
   const [open, setOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -162,19 +163,20 @@ export default function SelectedEvent({
   const [dbLocalSeeds, setDbLocalSeeds] = useState<Entrant[]>([]);
   const dbSeedsUnchanged = useMemo(
     () =>
+      dbLocalSeeds.length === event.seeds.raw.length &&
       dbLocalSeeds.every((entrant, i) => entrant.id === event.seeds.raw[i].id),
     [dbLocalSeeds, event.seeds.raw],
   );
   const dbSeedsEntrantMismatch = useMemo(
     () =>
-      dbLocalSeeds.length !== idToRawEntrant.size ||
-      dbLocalSeeds.some((entrant) => !idToRawEntrant.has(entrant.id)),
-    [dbLocalSeeds, idToRawEntrant],
+      dbLocalSeeds.some((entrant) => entrant.syncState !== SyncState.SYNCED),
+    [dbLocalSeeds],
   );
 
   const [mutableLocalSeeds, setMutableLocalSeeds] = useState<Entrant[]>([]);
   const mutableSeedsUnchanged = useMemo(
     () =>
+      dbLocalSeeds.length === mutableLocalSeeds.length &&
       dbLocalSeeds.every(
         (entrant, i) => entrant.id === mutableLocalSeeds[i].id,
       ),
@@ -415,7 +417,6 @@ export default function SelectedEvent({
           )}
           mutableLocalSeeds={mutableLocalSeeds}
           setMutableLocalSeeds={setMutableLocalSeeds}
-          idToRawEntrant={idToRawEntrant}
         />
       ) : (
         <StartggEvent

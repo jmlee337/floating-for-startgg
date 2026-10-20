@@ -11,6 +11,7 @@ import {
   SeedsStatus,
   Ranking,
   Player,
+  SyncState,
 } from '../common/types';
 import { mkdirSync } from 'fs';
 import path from 'path';
@@ -688,6 +689,11 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     }
     return { shouldRefresh, seedsStatus };
   };
+
+  const idToLastRawEntrant = new Map<
+    number,
+    { entrant: Entrant; overallSeedNum: number }
+  >();
   const getEvent = async (
     slug: string,
     event: SelectableEvent,
@@ -780,7 +786,12 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         }
         return player;
       });
-      idToEntrant.set(id, { id, players: entrantPlayers });
+      idToEntrant.set(id, {
+        id,
+        players: entrantPlayers,
+        // remote entrants are always "synced"
+        syncState: SyncState.SYNCED,
+      });
     });
 
     const phases = jsonPhases.map((jsonPhase) => ({
@@ -878,19 +889,30 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     }
     seedPhases.sort((a, b) => b.phaseOrder - a.phaseOrder);
 
-    const raw: Entrant[] = [];
-    seedPhases.forEach((phase) => {
-      const phaseSeeds = phase.pools.flatMap((pool) =>
-        pool.seeds.filter((seed) => seed.entrant),
-      );
-      phaseSeeds.sort((a, b) => a.seedNum - b.seedNum);
-      raw.push(...phaseSeeds.map((seed) => seed.entrant!));
-    });
-
     const maybeFixSeedsRes = await maybeFixSeeds(seedPhases);
     if (maybeFixSeedsRes.shouldRefresh) {
       return getEvent(slug, event);
     }
+
+    const newPhases = toPhases(seedPhases);
+    idToLastRawEntrant.clear();
+    const raw: Entrant[] = [];
+    newPhases.forEach((phase) => {
+      phase.pools
+        .flatMap((pool) => pool.seeds.filter((seed) => seed.entrant))
+        .sort((a, b) => a.seedNum - b.seedNum)
+        .forEach((seed) => {
+          if (!seed.entrant) {
+            throw new Error('unreachable');
+          }
+
+          raw.push(seed.entrant);
+          idToLastRawEntrant.set(seed.entrant.id, {
+            entrant: seed.entrant,
+            overallSeedNum: seed.seedNum + phase.seedNumOffset,
+          });
+        });
+    });
 
     // update players
     db.transaction(() => {
@@ -900,7 +922,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     return {
       ...event,
       seeds: {
-        phases: toPhases(seedPhases),
+        phases: newPhases,
         raw,
       },
       configuredPhases: db
@@ -1204,6 +1226,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     });
 
     const thresholdS = getThresholdS();
+    const copyIdToLastRawEntrant = new Map(idToLastRawEntrant);
     const entrants = dbSeeds.map((seed): Entrant => {
       const playerIds = entrantIdToPlayerIds.get(seed.entrantId);
       if (!playerIds) {
@@ -1229,8 +1252,24 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
           url: dbPlayer.url,
         };
       });
-      return { id: seed.entrantId, players };
+      const syncState = copyIdToLastRawEntrant.delete(seed.entrantId)
+        ? SyncState.SYNCED
+        : SyncState.LOCAL_ONLY;
+      return {
+        id: seed.entrantId,
+        players,
+        syncState,
+      };
     });
+
+    entrants.push(
+      ...Array.from(copyIdToLastRawEntrant.values())
+        .sort((a, b) => a.overallSeedNum - b.overallSeedNum)
+        .map((entrant): Entrant => ({
+          ...entrant.entrant,
+          syncState: SyncState.STARTGG_ONLY,
+        })),
+    );
 
     return entrants;
   });

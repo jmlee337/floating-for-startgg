@@ -43,16 +43,28 @@ export type Player = {
   url: string | null;
 };
 
+export enum SyncState {
+  SYNCED,
+  STARTGG_ONLY,
+  LOCAL_ONLY,
+}
+
 export type Entrant = {
   id: number;
   players: Player[];
+  syncState: SyncState;
+};
+
+export type Origin = {
+  placement: number;
+  poolId: number;
 };
 
 export type Seed = {
   id: number;
   seedNum: number;
   entrant: Entrant | undefined;
-  origin: { placement: number; poolId: number } | undefined;
+  origin: Origin | undefined;
 };
 
 export type Pool = {

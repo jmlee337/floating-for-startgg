@@ -1,4 +1,4 @@
-import { Entrant, Phase, Player } from '../common/types';
+import { Entrant, Phase, Player, SyncState } from '../common/types';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { move } from '@dnd-kit/helpers';
@@ -20,10 +20,10 @@ import { DragIndicator, EmojiEvents } from '@mui/icons-material';
 
 function PlayerWithRankings({
   player,
-  missing,
+  syncState,
 }: {
   player: Player;
-  missing: boolean;
+  syncState: SyncState;
 }) {
   return (
     <>
@@ -32,14 +32,24 @@ function PlayerWithRankings({
           href={player.url}
           target="_blank"
           sx={{
-            color: (theme) =>
-              missing
-                ? theme.palette.error.contrastText
-                : theme.palette.primary.main,
-            textDecorationColor: (theme) =>
-              missing
-                ? `alpha(from ${theme.palette.error.contrastText} / 0.4)`
-                : 'var(--Link-underlineColor)',
+            color: (theme) => {
+              if (syncState === SyncState.LOCAL_ONLY) {
+                return theme.palette.error.contrastText;
+              }
+              if (syncState === SyncState.STARTGG_ONLY) {
+                return theme.palette.success.contrastText;
+              }
+              return theme.palette.primary.main;
+            },
+            textDecorationColor: (theme) => {
+              if (syncState === SyncState.LOCAL_ONLY) {
+                return `alpha(from ${theme.palette.error.contrastText} / 0.4)`;
+              }
+              if (syncState === SyncState.STARTGG_ONLY) {
+                return `alpha(from ${theme.palette.success.contrastText} / 0.4)`;
+              }
+              return 'var(--Link-underlineColor)';
+            },
           }}
         >
           {player.gamerTag}
@@ -81,7 +91,6 @@ function Sortable({
   index,
   phaseOrder,
   phaseAndFns,
-  idToRawEntrant,
 }: {
   entrant: Entrant;
   index: number;
@@ -92,7 +101,6 @@ function Sortable({
     phaseOrder: number;
     fn: (index: number) => void;
   }[];
-  idToRawEntrant: Map<number, Entrant>;
 }) {
   const { ref, handleRef } = useSortable({
     id: entrant.id,
@@ -106,8 +114,11 @@ function Sortable({
       style={{ justifyContent: 'space-between' }}
       sx={{
         backgroundColor: (theme) => {
-          if (!idToRawEntrant.has(entrant.id)) {
+          if (entrant.syncState === SyncState.LOCAL_ONLY) {
             return theme.palette.error.light;
+          }
+          if (entrant.syncState === SyncState.STARTGG_ONLY) {
+            return theme.palette.success.light;
           }
           if (index % 2 === 1) {
             return theme.palette.action.hover;
@@ -134,10 +145,15 @@ function Sortable({
               flexDirection: 'row',
             }}
             sx={{
-              color: (theme) =>
-                idToRawEntrant.has(entrant.id)
-                  ? 'initial'
-                  : theme.palette.error.contrastText,
+              color: (theme) => {
+                if (entrant.syncState === SyncState.LOCAL_ONLY) {
+                  return theme.palette.error.contrastText;
+                }
+                if (entrant.syncState === SyncState.STARTGG_ONLY) {
+                  return theme.palette.success.contrastText;
+                }
+                return 'initial';
+              },
             }}
           >
             {index + 1}:&nbsp;
@@ -145,7 +161,7 @@ function Sortable({
               <PlayerWithRankings
                 key={player.id}
                 player={player}
-                missing={!idToRawEntrant.has(entrant.id)}
+                syncState={entrant.syncState}
               />
             ))}
           </Typography>
@@ -157,10 +173,15 @@ function Sortable({
             key={phaseAndFn.phaseId}
             size="small"
             sx={{
-              color: (theme) =>
-                idToRawEntrant.has(entrant.id)
-                  ? theme.palette.primary.main
-                  : theme.palette.error.contrastText,
+              color: (theme) => {
+                if (entrant.syncState === SyncState.LOCAL_ONLY) {
+                  return theme.palette.error.contrastText;
+                }
+                if (entrant.syncState === SyncState.STARTGG_ONLY) {
+                  return theme.palette.success.contrastText;
+                }
+                return theme.palette.primary.main;
+              },
             }}
             onClick={() => {
               phaseAndFn.fn(index);
@@ -179,12 +200,12 @@ export default function LocalSeedsList({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
-  idToRawEntrant,
+  startggOnlyEntrantsStartI,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
-  idToRawEntrant: Map<number, Entrant>;
+  startggOnlyEntrantsStartI: number;
 }) {
   const phaseAndFns = useMemo(
     () =>
@@ -232,11 +253,28 @@ export default function LocalSeedsList({
                   phaseAndFns={phaseAndFns.filter(
                     (phaseAndFn) => phaseAndFn.phaseId !== phase.id,
                   )}
-                  idToRawEntrant={idToRawEntrant}
                 />
               ))}
           </>
         ))}
+        {startggOnlyEntrantsStartI < mutableLocalSeeds.length && (
+          <>
+            <ListSubheader key={'overfow'} disableGutters>
+              To Remove
+            </ListSubheader>
+            {mutableLocalSeeds
+              .slice(startggOnlyEntrantsStartI)
+              .map((entrant, i) => (
+                <Sortable
+                  key={entrant.id}
+                  entrant={entrant}
+                  index={i + startggOnlyEntrantsStartI}
+                  phaseOrder={Number.MAX_SAFE_INTEGER}
+                  phaseAndFns={phaseAndFns}
+                />
+              ))}
+          </>
+        )}
       </List>
     </DragDropProvider>
   );
