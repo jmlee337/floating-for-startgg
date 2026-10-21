@@ -592,7 +592,11 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
       if (progressingInSeedsPerPool === 0 || directSeedsPerPool === 0) {
         continue;
       }
-      if (phase.bracketType !== 3 || progressingInSeedsPerPool !== 2) {
+      if (
+        phase.bracketType !== 3 ||
+        phase.pools.length % 2 !== 0 ||
+        progressingInSeedsPerPool !== 2
+      ) {
         fixUnsupported = true;
         continue;
       }
