@@ -313,11 +313,20 @@ export default function SelectedEvent({
                 variant="contained"
                 endIcon={<Save />}
                 onClick={async () => {
+                  const newMutableLocalSeeds = mutableLocalSeeds.filter(
+                    (entrant, i) => {
+                      if (i < event.seeds.raw.length) {
+                        return true;
+                      }
+                      return entrant.syncState !== SyncState.LOCAL_ONLY;
+                    },
+                  );
                   await window.electron.updateLocalSeeds(
                     event.id,
-                    mutableLocalSeeds,
+                    newMutableLocalSeeds,
                   );
-                  setDbLocalSeeds(mutableLocalSeeds);
+                  setDbLocalSeeds(newMutableLocalSeeds);
+                  setMutableLocalSeeds(newMutableLocalSeeds);
                 }}
               >
                 Save
@@ -417,6 +426,7 @@ export default function SelectedEvent({
           )}
           mutableLocalSeeds={mutableLocalSeeds}
           setMutableLocalSeeds={setMutableLocalSeeds}
+          overflowEntrantsStartI={event.seeds.raw.length}
         />
       ) : (
         <StartggEvent

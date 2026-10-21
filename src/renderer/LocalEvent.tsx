@@ -124,68 +124,65 @@ export default function LocalEvent({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
+  overflowEntrantsStartI,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
+  overflowEntrantsStartI: number;
 }) {
-  const { actualPhases, poolIdToSeeds, startggOnlyEntrantsStartI } =
-    useMemo(() => {
-      const remainingEntrants = new Array(...mutableLocalSeeds);
-      const newActualPhases: Phase[] = [];
-      for (const phase of phases) {
-        if (remainingEntrants.length === 0) {
-          break;
-        }
-
-        const numEntrants = phase.pools.flatMap((pool) =>
-          pool.seeds.filter((seed) => seed.entrant),
-        ).length;
-        const seedNumToEntrant = new Map(
-          remainingEntrants
-            .splice(0, numEntrants)
-            .map((entrant, i) => [i + 1, entrant]),
-        );
-
-        newActualPhases.push({
-          ...phase,
-          pools: phase.pools.map((pool) => ({
-            ...pool,
-            seeds: pool.seeds.map((seed) => {
-              if (!seed.entrant) {
-                return seed;
-              }
-
-              const entrant = seedNumToEntrant.get(seed.seedNum);
-              if (!entrant) {
-                throw new Error(
-                  `entrant not found for seedNum ${seed.seedNum} in phase ${phase.id}`,
-                );
-              }
-              return {
-                ...seed,
-                entrant,
-              };
-            }),
-          })),
-        });
+  const { actualPhases, poolIdToSeeds } = useMemo(() => {
+    const remainingEntrants = new Array(...mutableLocalSeeds);
+    const newActualPhases: Phase[] = [];
+    for (const phase of phases) {
+      if (remainingEntrants.length === 0) {
+        break;
       }
-      const newPoolIdToSeeds = new Map<number, Seed[]>();
-      newActualPhases.forEach((phase) => {
-        phase.pools.forEach((pool) => {
-          newPoolIdToSeeds.set(pool.id, pool.seeds);
-        });
-      });
 
-      const lastActualPhase = newActualPhases[newActualPhases.length - 1];
-      return {
-        actualPhases: newActualPhases,
-        poolIdToSeeds: newPoolIdToSeeds,
-        startggOnlyEntrantsStartI:
-          lastActualPhase.seedNumOffset +
-          lastActualPhase.pools.flatMap((pool) => pool.seeds).length,
-      };
-    }, [phases, mutableLocalSeeds]);
+      const numEntrants = phase.pools.flatMap((pool) =>
+        pool.seeds.filter((seed) => seed.entrant),
+      ).length;
+      const seedNumToEntrant = new Map(
+        remainingEntrants
+          .splice(0, numEntrants)
+          .map((entrant, i) => [i + 1, entrant]),
+      );
+
+      newActualPhases.push({
+        ...phase,
+        pools: phase.pools.map((pool) => ({
+          ...pool,
+          seeds: pool.seeds.map((seed) => {
+            if (!seed.entrant) {
+              return seed;
+            }
+
+            const entrant = seedNumToEntrant.get(seed.seedNum);
+            if (!entrant) {
+              throw new Error(
+                `entrant not found for seedNum ${seed.seedNum} in phase ${phase.id}`,
+              );
+            }
+            return {
+              ...seed,
+              entrant,
+            };
+          }),
+        })),
+      });
+    }
+    const newPoolIdToSeeds = new Map<number, Seed[]>();
+    newActualPhases.forEach((phase) => {
+      phase.pools.forEach((pool) => {
+        newPoolIdToSeeds.set(pool.id, pool.seeds);
+      });
+    });
+
+    return {
+      actualPhases: newActualPhases,
+      poolIdToSeeds: newPoolIdToSeeds,
+    };
+  }, [phases, mutableLocalSeeds]);
 
   const [selectedSeedNum, setSelectedSeedNum] = useState(0);
   return (
@@ -233,14 +230,25 @@ export default function LocalEvent({
           </Stack>
         </Stack>
       ))}
-      {startggOnlyEntrantsStartI < mutableLocalSeeds.length && (
+      {overflowEntrantsStartI < mutableLocalSeeds.length && (
         <Stack direction="column">
           <Typography
             variant="body2"
             color="textSecondary"
             style={{ flexShrink: 0 }}
           >
-            To Remove
+            Overflow (
+            <Typography
+              component="span"
+              variant="body2"
+              sx={{
+                color: (theme) => theme.palette.error.contrastText,
+                backgroundColor: (theme) => theme.palette.error.light,
+              }}
+            >
+              local entrants
+            </Typography>{' '}
+            will be removed on save)
           </Typography>
           <Stack
             direction="row"
@@ -250,13 +258,13 @@ export default function LocalEvent({
             }}
           >
             {mutableLocalSeeds
-              .slice(startggOnlyEntrantsStartI)
+              .slice(overflowEntrantsStartI)
               .map((entrant, i) => (
                 <Stack key={entrant.id} style={{ width: '130px' }}>
                   <RenderSeed
                     entrant={entrant}
                     origin={undefined}
-                    seedNumOffset={startggOnlyEntrantsStartI}
+                    seedNumOffset={overflowEntrantsStartI}
                     seedNum={i + 1}
                     poolIdToSeeds={poolIdToSeeds}
                     selectedSeedNum={selectedSeedNum}
@@ -275,7 +283,7 @@ export default function LocalEvent({
         phases={phases}
         mutableLocalSeeds={mutableLocalSeeds}
         setMutableLocalSeeds={setMutableLocalSeeds}
-        startggOnlyEntrantsStartI={startggOnlyEntrantsStartI}
+        overflowEntrantsStartI={overflowEntrantsStartI}
       />
     </>
   );

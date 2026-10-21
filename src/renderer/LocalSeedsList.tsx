@@ -200,12 +200,12 @@ export default function LocalSeedsList({
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
-  startggOnlyEntrantsStartI,
+  overflowEntrantsStartI,
 }: {
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
-  startggOnlyEntrantsStartI: number;
+  overflowEntrantsStartI: number;
 }) {
   const phaseAndFns = useMemo(
     () =>
@@ -257,18 +257,29 @@ export default function LocalSeedsList({
               ))}
           </>
         ))}
-        {startggOnlyEntrantsStartI < mutableLocalSeeds.length && (
+        {overflowEntrantsStartI < mutableLocalSeeds.length && (
           <>
-            <ListSubheader key={'overfow'} disableGutters>
-              To Remove
+            <ListSubheader key={'overflow'} disableGutters>
+              Overflow (
+              <Typography
+                component="span"
+                variant="body2"
+                sx={{
+                  color: (theme) => theme.palette.error.contrastText,
+                  backgroundColor: (theme) => theme.palette.error.light,
+                }}
+              >
+                local entrants
+              </Typography>{' '}
+              will be removed on save)
             </ListSubheader>
             {mutableLocalSeeds
-              .slice(startggOnlyEntrantsStartI)
+              .slice(overflowEntrantsStartI)
               .map((entrant, i) => (
                 <Sortable
                   key={entrant.id}
                   entrant={entrant}
-                  index={i + startggOnlyEntrantsStartI}
+                  index={i + overflowEntrantsStartI}
                   phaseOrder={Number.MAX_SAFE_INTEGER}
                   phaseAndFns={phaseAndFns}
                 />
