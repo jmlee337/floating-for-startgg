@@ -20,6 +20,7 @@ import { CloudDownload, CloudUpload, Restore, Save } from '@mui/icons-material';
 import LocalEvent from './LocalEvent';
 import StartggEvent from './StartggEvent';
 import ConfigurePhase from './ConfigurePhase';
+import isFloatingCompatible from './isFloatingCompatible';
 
 function getDirectInPerPool(phase: Phase) {
   if (phase.pools.length === 0) {
@@ -103,12 +104,15 @@ export default function SelectedEvent({
       );
     });
 
-    const fullyConfiguredInner = event.seeds.phases.every((phase) =>
+    const floatablePhases = event.seeds.phases.filter((phase) =>
+      isFloatingCompatible(phase.bracketType),
+    );
+    const fullyConfiguredInner = floatablePhases.every((phase) =>
       idToConfiguredPhaseInner.has(phase.id),
     );
     const configurationMatchesInner =
       fullyConfiguredInner &&
-      event.seeds.phases.every((phase) => {
+      floatablePhases.every((phase) => {
         const configuredPhase = idToConfiguredPhaseInner.get(phase.id)!;
         const progressingInPerPool = idToProgressingInPerPoolInner.get(
           phase.id,
@@ -123,7 +127,7 @@ export default function SelectedEvent({
       });
     const properlyFlowedInner =
       configurationMatchesInner &&
-      event.seeds.phases.every((phase) => {
+      floatablePhases.every((phase) => {
         const configuredPhase = idToConfiguredPhaseInner.get(phase.id)!;
         const progressingInPerPool = idToProgressingInPerPoolInner.get(
           phase.id,
