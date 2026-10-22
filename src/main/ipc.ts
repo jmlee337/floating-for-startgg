@@ -562,7 +562,8 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
     for (const phase of phases) {
       let progressingInSeedsPerPool = -1;
       let directSeedsPerPool = -1;
-      const k = phase.pools.length * 2;
+      const numPools = phase.pools.length;
+      const k = numPools * 2;
       if (
         phase.pools.some((pool) => {
           const progressingInSeeds = pool.seeds.filter((seed) => seed.origin);
@@ -602,30 +603,23 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         continue;
       }
 
-      const inPhaseIdToNum = new Map<number, number>();
+      const inPhaseIds = new Set<number>();
       phase.pools
         .flatMap((pool) => pool.seeds.filter((seed) => seed.origin))
         .forEach((seed) => {
-          const num = inPhaseIdToNum.get(seed.origin!.phaseId) ?? 0;
-          inPhaseIdToNum.set(seed.origin!.phaseId, num + 1);
+          inPhaseIds.add(seed.origin!.phaseId);
         });
-      Array.from(inPhaseIdToNum.entries())
-        .map(([phaseId, num]) => ({
-          inPhase: idToPhase.get(phaseId),
-          num,
-        }))
-        .forEach(({ inPhase, num }) => {
-          if (!inPhase) {
-            return;
-          }
-          if (inPhase.bracketType !== 3) {
-            return;
-          }
-          if (num / phase.pools.length !== 2 || phase.pools.length % 2 !== 0) {
-            fixUnsupported = true;
-          }
-        });
-      if (fixUnsupported) {
+      if (inPhaseIds.size > 1) {
+        fixUnsupported = true;
+        continue;
+      }
+
+      const inPhase = idToPhase.get(Array.from(inPhaseIds.keys())[0]);
+      if (!inPhase || inPhase.bracketType !== 3) {
+        continue;
+      }
+      if (progressingInSeedsPerPool > numPools) {
+        fixUnsupported = true;
         continue;
       }
 
@@ -637,14 +631,52 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         const multiplier = lastI + 1;
         const progressingSeedNum1 =
           multiplier * k + 1 - directSeedNums[directSeedNums.length - 1];
-        const progressingSeedNum2 = progressingSeedNum1 + phase.pools.length;
+
+        // blessed case
+        if (progressingInSeedsPerPool === 2 && numPools % 2 === 0) {
+          const progressingSeedNum2 = progressingSeedNum1 + numPools;
+          return {
+            id: pool.id,
+            expectedSeedNums: [
+              ...directSeedNums,
+              progressingSeedNum1,
+              progressingSeedNum2,
+            ],
+          };
+        }
+
+        // 01, 02, 03, 04
+        // 08, 07, 06, 05
+        // 09, 10, 11, 12
+        // 16, 15, 14, 13
+        // 17, 18, 19, 20
+        // 24, 23, 22, 21
+        // ->
+        // 01, 02, 03, 04
+        // 08, 07, 06, 05
+        // 09, 10, 11, 12
+        // 13, 16, 15, 14 +1
+        // 19, 20, 17, 18 +2
+        // 23, 22, 21, 24 +3
+        const unFixedSeedNums = [progressingSeedNum1];
+        const progressingSeedNums = [progressingSeedNum1];
+        for (let i = 1; i < progressingInSeedsPerPool; i++) {
+          const round = directSeedNums.length + i + 1;
+          const maxSeedNum = round * numPools;
+          const nextLastI = directSeedNums.length - 1 + i;
+          const nextMultiplier = nextLastI + 1;
+          const unFixedSeedNum =
+            nextMultiplier * k + 1 - unFixedSeedNums[i - 1];
+          let maybeNextSeedNum = unFixedSeedNum + i;
+          if (maybeNextSeedNum > maxSeedNum) {
+            maybeNextSeedNum -= numPools;
+          }
+          unFixedSeedNums[i] = unFixedSeedNum;
+          progressingSeedNums[i] = maybeNextSeedNum;
+        }
         return {
           id: pool.id,
-          expectedSeedNums: [
-            ...directSeedNums,
-            progressingSeedNum1,
-            progressingSeedNum2,
-          ],
+          expectedSeedNums: [...directSeedNums, ...progressingSeedNums],
         };
       });
       if (
