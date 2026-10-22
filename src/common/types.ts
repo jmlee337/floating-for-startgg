@@ -58,6 +58,7 @@ export type Entrant = {
 export type Origin = {
   placement: number;
   poolId: number;
+  phaseId: number;
 };
 
 export type Seed = {

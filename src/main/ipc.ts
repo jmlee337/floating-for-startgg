@@ -12,6 +12,7 @@ import {
   Ranking,
   Player,
   SyncState,
+  Origin,
 } from '../common/types';
 import { mkdirSync } from 'fs';
 import path from 'path';
@@ -54,7 +55,7 @@ type DbRanking = Ranking & {
 const PHASE_SEEDS_QUERY = `
   query phaseSeeds($phaseId: ID, $page: Int) {
     phase(id: $phaseId) {
-      seeds(query: {page: $page, perPage: 249, sortBy: "seedNum ASC"}) {
+      seeds(query: {page: $page, perPage: 512, sortBy: "seedNum ASC"}) {
         pageInfo {
           totalPages
         }
@@ -69,6 +70,9 @@ const PHASE_SEEDS_QUERY = `
           progressionSource {
             originPlacement
             originPhaseGroup {
+              id
+            }
+            originPhase {
               id
             }
           }
@@ -546,6 +550,7 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
   const maybeFixSeeds = async (
     phases: SeedPhase[],
   ): Promise<{ shouldRefresh: boolean; seedsStatus: SeedsStatus }> => {
+    const idToPhase = new Map(phases.map((phase) => [phase.id, phase]));
     const poolIdToSeeds = new Map(
       phases.flatMap((phase) =>
         phase.pools.map((pool) => [pool.id, pool.seeds]),
@@ -589,15 +594,38 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
         reflowRequired = true;
         continue;
       }
-      if (progressingInSeedsPerPool === 0 || directSeedsPerPool === 0) {
-        continue;
-      }
       if (
         phase.bracketType !== 3 ||
-        phase.pools.length % 2 !== 0 ||
-        progressingInSeedsPerPool !== 2
+        progressingInSeedsPerPool === 0 ||
+        progressingInSeedsPerPool === 1
       ) {
-        fixUnsupported = true;
+        continue;
+      }
+
+      const inPhaseIdToNum = new Map<number, number>();
+      phase.pools
+        .flatMap((pool) => pool.seeds.filter((seed) => seed.origin))
+        .forEach((seed) => {
+          const num = inPhaseIdToNum.get(seed.origin!.phaseId) ?? 0;
+          inPhaseIdToNum.set(seed.origin!.phaseId, num + 1);
+        });
+      Array.from(inPhaseIdToNum.entries())
+        .map(([phaseId, num]) => ({
+          inPhase: idToPhase.get(phaseId),
+          num,
+        }))
+        .forEach(({ inPhase, num }) => {
+          if (!inPhase) {
+            return;
+          }
+          if (inPhase.bracketType !== 3) {
+            return;
+          }
+          if (num / phase.pools.length !== 2 || phase.pools.length % 2 !== 0) {
+            fixUnsupported = true;
+          }
+        });
+      if (fixUnsupported) {
         continue;
       }
 
@@ -843,8 +871,9 @@ export default async function setupIPCs(mainWindow: BrowserWindow) {
             const entrant = entrantId ? idToEntrant.get(entrantId) : undefined;
             const placement = node.progressionSource?.originPlacement;
             const poolId = node.progressionSource?.originPhaseGroup.id;
-            const origin =
-              placement && poolId ? { placement, poolId } : undefined;
+            const phaseId = node.progressionSource?.originPhase.id;
+            const origin: Origin | undefined =
+              placement && poolId ? { placement, poolId, phaseId } : undefined;
             const seed: Seed = {
               id: node.id,
               seedNum: node.seedNum,
