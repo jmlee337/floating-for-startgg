@@ -317,18 +317,17 @@ export default function SelectedEvent({
                 variant="contained"
                 endIcon={<Save />}
                 onClick={async () => {
-                  const newMutableLocalSeeds = mutableLocalSeeds.filter(
-                    (entrant, i) => {
+                  await window.electron.updateLocalSeeds(
+                    event.id,
+                    mutableLocalSeeds.filter((entrant, i) => {
                       if (i < event.seeds.raw.length) {
                         return true;
                       }
                       return entrant.syncState !== SyncState.LOCAL_ONLY;
-                    },
+                    }),
                   );
-                  await window.electron.updateLocalSeeds(
-                    event.id,
-                    newMutableLocalSeeds,
-                  );
+                  const newMutableLocalSeeds =
+                    await window.electron.getLocalSeeds(event.id);
                   setDbLocalSeeds(newMutableLocalSeeds);
                   setMutableLocalSeeds(newMutableLocalSeeds);
                 }}
