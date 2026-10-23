@@ -180,5 +180,5 @@
     "npm": ">=10.0.0"
   },
   "type": "commonjs",
-  "version": "0.0.5"
+  "version": "0.0.6"
 }
