@@ -207,23 +207,35 @@ export default function LocalSeedsList({
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
   overflowEntrantsStartI: number;
 }) {
-  const phaseAndFns = useMemo(
-    () =>
-      phases.map((phase) => ({
-        phaseId: phase.id,
-        phaseName: phase.name,
-        phaseOrder: phase.phaseOrder,
-        fn: (index: number) => {
-          setMutableLocalSeeds((oldMutableLocalSeeds) => {
-            const newMutableLocalSeeds = [...oldMutableLocalSeeds];
-            const [removed] = newMutableLocalSeeds.splice(index, 1);
-            newMutableLocalSeeds.splice(phase.seedNumOffset, 0, removed);
-            return newMutableLocalSeeds;
-          });
-        },
-      })),
-    [phases, setMutableLocalSeeds],
-  );
+  const phaseAndFns = useMemo(() => {
+    const newPhaseAndFns = phases.map((phase) => ({
+      phaseId: phase.id,
+      phaseName: phase.name,
+      phaseOrder: phase.phaseOrder,
+      fn: (index: number) => {
+        setMutableLocalSeeds((oldMutableLocalSeeds) => {
+          const newMutableLocalSeeds = [...oldMutableLocalSeeds];
+          const [removed] = newMutableLocalSeeds.splice(index, 1);
+          newMutableLocalSeeds.splice(phase.seedNumOffset, 0, removed);
+          return newMutableLocalSeeds;
+        });
+      },
+    }));
+    newPhaseAndFns.push({
+      phaseId: -1,
+      phaseName: 'End',
+      phaseOrder: -1,
+      fn: (index: number) => {
+        setMutableLocalSeeds((oldMutableLocalSeeds) => {
+          const newMutableLocalSeeds = [...oldMutableLocalSeeds];
+          const [removed] = newMutableLocalSeeds.splice(index, 1);
+          newMutableLocalSeeds.push(removed);
+          return newMutableLocalSeeds;
+        });
+      },
+    });
+    return newPhaseAndFns;
+  }, [phases, setMutableLocalSeeds]);
   return (
     <DragDropProvider
       onDragEnd={(event) => {
@@ -280,7 +292,7 @@ export default function LocalSeedsList({
                   key={entrant.id}
                   entrant={entrant}
                   index={i + overflowEntrantsStartI}
-                  phaseOrder={Number.MAX_SAFE_INTEGER}
+                  phaseOrder={-1}
                   phaseAndFns={phaseAndFns}
                 />
               ))}

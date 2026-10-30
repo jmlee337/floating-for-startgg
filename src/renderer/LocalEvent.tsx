@@ -4,6 +4,7 @@ import { Stack, Typography } from '@mui/material';
 import LocalSeedsList from './LocalSeedsList';
 
 function RenderSeed({
+  showProjected,
   seedNumOffset,
   seedNum,
   entrant,
@@ -13,6 +14,7 @@ function RenderSeed({
   setSelectedSeedNum,
   setMutableLocalSeeds,
 }: {
+  showProjected: boolean;
   seedNumOffset: number;
   seedNum: number;
   entrant: Entrant | undefined;
@@ -108,12 +110,13 @@ function RenderSeed({
           }}
         >
           {seedNum}:{' '}
-          {poolIdToSeeds
-            .get(origin.poolId)
-            ?.[origin.placement - 1]?.entrant?.players.map(
-              (player) => player.gamerTag,
-            )
-            .join(' / ')}
+          {showProjected &&
+            poolIdToSeeds
+              .get(origin.poolId)
+              ?.[origin.placement - 1]?.entrant?.players.map(
+                (player) => player.gamerTag,
+              )
+              .join(' / ')}
         </Typography>
       )}
     </>
@@ -121,11 +124,13 @@ function RenderSeed({
 }
 
 export default function LocalEvent({
+  showProjected,
   phases,
   mutableLocalSeeds,
   setMutableLocalSeeds,
   overflowEntrantsStartI,
 }: {
+  showProjected: boolean;
   phases: Phase[];
   mutableLocalSeeds: Entrant[];
   setMutableLocalSeeds: Dispatch<SetStateAction<Entrant[]>>;
@@ -215,6 +220,7 @@ export default function LocalEvent({
                 {pool.seeds.map((seed) => (
                   <RenderSeed
                     key={seed.id}
+                    showProjected={showProjected}
                     entrant={seed.entrant}
                     origin={seed.origin}
                     seedNumOffset={phase.seedNumOffset}
@@ -262,6 +268,7 @@ export default function LocalEvent({
               .map((entrant, i) => (
                 <Stack key={entrant.id} style={{ width: '130px' }}>
                   <RenderSeed
+                    showProjected={showProjected}
                     entrant={entrant}
                     origin={undefined}
                     seedNumOffset={overflowEntrantsStartI}

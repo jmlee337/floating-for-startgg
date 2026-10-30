@@ -2,7 +2,13 @@ import { useMemo } from 'react';
 import { Phase, Seed } from '../common/types';
 import { Stack, Typography } from '@mui/material';
 
-export default function StartggEvent({ phases }: { phases: Phase[] }) {
+export default function StartggEvent({
+  showProjected,
+  phases,
+}: {
+  showProjected: boolean;
+  phases: Phase[];
+}) {
   const poolIdToSeeds = useMemo(() => {
     const newPoolIdToSeeds = new Map<number, Seed[]>();
     phases.forEach((phase) => {
@@ -56,7 +62,8 @@ export default function StartggEvent({ phases }: { phases: Phase[] }) {
                       seed.entrant.players
                         .map((player) => player.gamerTag)
                         .join(' / ')}
-                    {seed.origin &&
+                    {showProjected &&
+                      seed.origin &&
                       poolIdToSeeds
                         .get(seed.origin.poolId)
                         ?.[seed.origin.placement - 1]?.entrant?.players.map(

@@ -1,10 +1,12 @@
 import {
   Alert,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Stack,
   Typography,
 } from '@mui/material';
@@ -15,7 +17,7 @@ import {
   SeedsStatus,
   SyncState,
 } from '../common/types';
-import { useMemo, useState } from 'react';
+import { ChangeEvent, useMemo, useState } from 'react';
 import { CloudDownload, CloudUpload, Restore, Save } from '@mui/icons-material';
 import LocalEvent from './LocalEvent';
 import StartggEvent from './StartggEvent';
@@ -187,6 +189,8 @@ export default function SelectedEvent({
     [dbLocalSeeds, mutableLocalSeeds],
   );
 
+  const [showProjected, setShowProjected] = useState(true);
+
   return (
     <Stack
       direction="column"
@@ -265,9 +269,31 @@ export default function SelectedEvent({
             width: '100%',
           }}
         >
-          <Typography variant="body1" style={{ margin: '4px 0' }}>
-            {editing ? 'Click to swap!' : 'Viewing start.gg:'}
-          </Typography>
+          <Stack
+            direction="row"
+            style={{
+              alignItems: 'center',
+              justifyContent: 'start',
+            }}
+          >
+            <Typography variant="body1" style={{ margin: '4px 0' }}>
+              {editing ? 'Click to swap!' : 'Viewing start.gg'}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showProjected}
+                  onChange={(ev: ChangeEvent<HTMLInputElement>) => {
+                    setShowProjected(ev.target.checked);
+                  }}
+                />
+              }
+              disableTypography
+              label="Show projected"
+              labelPlacement="start"
+              sx={{ typography: 'caption' }}
+            />
+          </Stack>
           {editing ? (
             <Stack direction="row" style={{ gap: '8px' }}>
               <Button
@@ -424,6 +450,7 @@ export default function SelectedEvent({
       </Dialog>
       {editing ? (
         <LocalEvent
+          showProjected={showProjected}
           phases={event.seeds.phases.filter(
             (phase) => idToDirectInPerPool.get(phase.id) ?? 0 !== 0,
           )}
@@ -433,6 +460,7 @@ export default function SelectedEvent({
         />
       ) : (
         <StartggEvent
+          showProjected={showProjected}
           phases={event.seeds.phases.filter(
             (phase) => idToDirectInPerPool.get(phase.id) ?? 0 !== 0,
           )}
